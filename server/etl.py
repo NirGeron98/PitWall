@@ -134,7 +134,7 @@ def run_etl():
     init_db()
     db = SessionLocal()
 
-    years_to_process = [2023, 2024, 2025]
+    years_to_process = [2020, 2021, 2022, 2023, 2024, 2025]
 
     for year in years_to_process:
         process_year(year, db)

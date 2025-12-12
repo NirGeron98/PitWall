@@ -13,11 +13,10 @@ interface Props {
   year: number;
   onYearChange: (year: number) => void;
   userEmail?: string;
-  userName?: string;
   navItems: NavItem[];
 }
 
-export const Header: React.FC<Props> = ({ year, onYearChange, userEmail, userName, navItems }) => {
+export const Header: React.FC<Props> = ({ year, onYearChange, userEmail, navItems }) => {
   const { logout } = useAuth();
   const [scrolled, setScrolled] = useState(false);
   const location = useLocation();
@@ -83,6 +82,9 @@ export const Header: React.FC<Props> = ({ year, onYearChange, userEmail, userNam
                   fontWeight: 700
                 }}
               >
+                <option value={2020}>2020</option>
+                <option value={2021}>2021</option>
+                <option value={2022}>2022</option>
                 <option value={2023}>2023</option>
                 <option value={2024}>2024</option>
                 <option value={2025}>2025</option>
@@ -95,20 +97,14 @@ export const Header: React.FC<Props> = ({ year, onYearChange, userEmail, userNam
 
           {/* User Profile */}
           {userEmail ? (
-            <div className="flex-row items-center" style={{ gap: '12px' }}>
-              <div className="flex-row items-center hidden-mobile" style={{ gap: '8px', padding: '6px 12px', background: 'var(--bg-subtle)', borderRadius: '99px', border: '1px solid var(--border)' }}>
-                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }} />
-                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{userName || userEmail.split('@')[0]}</span>
-              </div>
-              <button
-                onClick={logout}
-                className="btn-reset flex-row items-center"
-                style={{ color: 'var(--accent-red)', padding: '8px' }}
-                title="Sign Out"
-              >
-                <LogOut size={20} className="hover-red" />
-              </button>
-            </div>
+            <button
+              onClick={logout}
+              className="btn-reset flex-row items-center"
+              style={{ color: 'var(--accent-red)', padding: '8px' }}
+              title="Sign Out"
+            >
+              <LogOut size={20} className="hover-red" />
+            </button>
           ) : (
             <div className="flex-row items-center" style={{ gap: '8px', opacity: 0.5 }}>
               <User size={20} />

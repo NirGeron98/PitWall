@@ -202,6 +202,13 @@ button {
   }
 }
 
+.standings-wrapper {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 var(--space-2);
+}
+
 @media (max-width: 1200px) {
   .races-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -295,7 +302,8 @@ button {
 }
 
 .page-title {
-  font-size: 2.25rem;
+  /* Fluid, responsive title size */
+  font-size: clamp(1.5rem, 2.2vw + 1rem, 2.5rem);
   font-weight: 800;
   letter-spacing: -0.03em;
   color: var(--text-primary);
@@ -642,6 +650,30 @@ button {
   background: var(--bg-card);
   width: 100%;
 }
+/* ------------------------------ */
+/* Responsive Utilities & Helpers */
+/* ------------------------------ */
+
+/* Text alignment helpers */
+.text-right { text-align: right; }
+.text-center { text-align: center; }
+.text-left { text-align: left; }
+
+/* Visibility helpers */
+.desktop-only { display: block; }
+.mobile-only { display: none; }
+.hidden-mobile { display: initial; }
+.hidden-desktop { display: none; }
+
+/* Table/list responsive swap helpers used across components */
+.table-desktop { display: table; width: 100%; }
+.mobile-list { display: none; }
+.mobile-list .mobile-row { border-bottom: 1px solid var(--border); padding: var(--space-4); }
+
+/* Page title centering on narrow viewports */
+@media (max-width: 1024px) {
+  .page-title { justify-content: center; text-align: center; width: 100%; }
+}
 
 .table-compact {
   width: 100%;
@@ -693,6 +725,17 @@ button {
   .search-input:focus {
     width: 100%;
   }
+
+  /* Swap table to mobile list where available */
+  .table-desktop { display: none; }
+  .mobile-list { display: block; }
+  .desktop-only { display: none; }
+  .mobile-only { display: block; }
+  .hidden-mobile { display: none !important; }
+  .hidden-desktop { display: initial; }
+  
+  /* Mobile list defaults */
+  .mobile-list .mobile-row { padding: var(--space-4); }
 }
 
 /* Misc from previous CSS that is critical */
@@ -781,5 +824,245 @@ button {
 
   to {
     transform: rotate(360deg);
+  }
+}
+
+
+
+
+
+/* Enhanced Page Header */
+.page-header-enhanced {
+  position: relative;
+  text-align: center;
+  padding: 48px 24px;
+  margin-bottom: 48px;
+  overflow: hidden;
+  border-radius: 18px;
+  background: linear-gradient(135deg, 
+    rgba(225, 6, 0, 0.08) 0%,
+    rgba(24, 24, 27, 0.4) 50%,
+    rgba(225, 6, 0, 0.05) 100%
+  );
+  border: 1px solid rgba(225, 6, 0, 0.2);
+}
+
+/* Background decorations */
+.header-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.grid-overlay {
+  position: absolute;
+  inset: 0;
+  background-image: 
+    linear-gradient(rgba(225, 6, 0, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(225, 6, 0, 0.02) 1px, transparent 1px);
+  background-size: 40px 40px;
+  opacity: 0.4;
+}
+
+.glow-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.3;
+  animation: float 6s ease-in-out infinite;
+}
+
+.glow-left {
+  top: -50px;
+  left: 10%;
+  width: 200px;
+  height: 200px;
+  background: radial-gradient(circle, rgba(225, 6, 0, 0.4), transparent);
+  animation-delay: 0s;
+}
+
+.glow-right {
+  bottom: -50px;
+  right: 10%;
+  width: 180px;
+  height: 180px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.1), transparent);
+  animation-delay: 3s;
+}
+
+/* Racing stripes animation */
+.speed-lines {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 100%;
+  height: 6px;
+  opacity: 0.1;
+  overflow: hidden;
+}
+
+.speed-line {
+  position: absolute;
+  left: -100px;
+  height: 100%;
+  width: 60px;
+  background: var(--accent-red);
+  transform: skewX(-25deg);
+  animation: slideSpeed 2s linear infinite;
+}
+
+.speed-line:nth-child(1) { animation-delay: 0s; top: 0; }
+.speed-line:nth-child(2) { animation-delay: 0.4s; top: 0; }
+.speed-line:nth-child(3) { animation-delay: 0.8s; top: 0; }
+
+/* Title content */
+.header-content {
+  position: relative;
+  z-index: 2;
+}
+
+.page-title-enhanced {
+  font-family: var(--font-display);
+  font-size: 3rem;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  background: linear-gradient(135deg, 
+    var(--text-primary) 0%,
+    rgba(225, 6, 0, 0.95) 40%,
+    var(--text-primary) 80%
+  );
+  background-size: 200% auto;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: titleShimmer 4s ease-in-out infinite;
+  position: relative;
+  display: inline-block;
+}
+
+/* Decorative accent line */
+.title-accent {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.accent-line {
+  width: 80px;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--accent-red), transparent);
+  border-radius: 2px;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.accent-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--accent-red);
+  border-radius: 50%;
+  box-shadow: 0 0 16px rgba(225, 6, 0, 0.8);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+/* Subtitle badge (אופציונלי) */
+.subtitle-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  background: rgba(225, 6, 0, 0.12);
+  border: 1px solid rgba(225, 6, 0, 0.3);
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #ff8a80;
+  margin-top: 16px;
+}
+
+.badge-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--accent-red);
+  border-radius: 50%;
+  animation: blink 1.5s ease-in-out infinite;
+}
+
+/* === אנימציות === */
+@keyframes titleShimmer {
+  0%, 100% {
+    background-position: 0% center;
+  }
+  50% {
+    background-position: 200% center;
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-20px) scale(1.1);
+  }
+}
+
+@keyframes slideSpeed {
+  0% {
+    left: -100px;
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    left: 100%;
+    opacity: 0;
+  }
+}
+
+@keyframes blink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* === Responsive === */
+@media (max-width: 768px) {
+  .page-header-enhanced {
+    padding: 36px 20px;
+  }
+
+  .page-title-enhanced {
+    font-size: 2rem;
+  }
+
+  .accent-line {
+    width: 50px;
+  }
+
+  .glow-orb {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .page-title-enhanced {
+    font-size: 1.75rem;
+  }
+
+  .subtitle-badge {
+    font-size: 0.75rem;
+    padding: 5px 12px;
   }
 }

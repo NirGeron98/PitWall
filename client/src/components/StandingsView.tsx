@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { Trophy, Shield, Medal } from 'lucide-react';
+import { Trophy, Shield } from 'lucide-react';
 import type { DriverStanding, TeamStanding } from '../types/f1';
 import { useData } from '../contexts/DataContext';
-import { Card } from './ui/Card';
 
 interface Props {
     onDriverSelect?: (driverNumber: string) => void;
@@ -11,169 +10,146 @@ interface Props {
 export const StandingsView: React.FC<Props> = ({ onDriverSelect }) => {
     const [view, setView] = useState<'drivers' | 'teams'>('drivers');
     const { driverStandings, teamStandings } = useData();
-
+    
     const data: (DriverStanding | TeamStanding)[] = view === 'drivers' ? driverStandings : teamStandings;
 
     return (
-        <div className="flex-col" style={{ gap: '24px' }}>
-            {/* Toggle Switcher */}
-            <div className="flex-row justify-center">
-                <div style={{
-                    background: 'var(--bg-subtle)',
-                    padding: '4px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border)',
-                    display: 'flex',
-                    gap: '4px'
-                }}>
-                    <button
-                        className="btn-reset"
-                        onClick={() => setView('drivers')}
-                        style={{
-                            padding: '8px 24px',
-                            background: view === 'drivers' ? 'var(--bg-surface)' : 'transparent',
-                            color: view === 'drivers' ? 'var(--text-primary)' : 'var(--text-secondary)',
-                            borderRadius: 'var(--radius-sm)',
-                            fontWeight: 600,
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            transition: 'all 0.2s',
-                            boxShadow: view === 'drivers' ? '0 1px 3px rgba(0,0,0,0.2)' : 'none'
-                        }}
-                    >
-                        <Trophy size={16} />
-                        Drivers
-                    </button>
-                    <button
-                        className="btn-reset"
-                        onClick={() => setView('teams')}
-                        style={{
-                            padding: '8px 24px',
-                            background: view === 'teams' ? 'var(--bg-surface)' : 'transparent',
-                            color: view === 'teams' ? 'var(--text-primary)' : 'var(--text-secondary)',
-                            borderRadius: 'var(--radius-sm)',
-                            fontWeight: 600,
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            transition: 'all 0.2s',
-                            boxShadow: view === 'teams' ? '0 1px 3px rgba(0,0,0,0.2)' : 'none'
-                        }}
-                    >
-                        <Shield size={16} />
-                        Constructors
-                    </button>
-                </div>
+        <div className="standings-wrapper">
+            {/* Toggle Buttons */}
+            <div className="flex-row" style={{ marginBottom: '30px', justifyContent: 'center', gap: '12px' }}>
+                <button 
+                    className={`btn-tab ${view === 'drivers' ? 'active' : ''}`}
+                    onClick={() => setView('drivers')}
+                    style={{
+                        padding: '10px 24px',
+                        borderRadius: '8px',
+                        fontSize: '1rem',
+                        fontWeight: 600,
+                        transition: 'all 0.3s ease',
+                        border: 'none',
+                        cursor: 'pointer',
+                        background: view === 'drivers' ? 'var(--accent-red)' : 'rgba(225, 6, 0, 0.1)',
+                        color: view === 'drivers' ? '#fff' : 'var(--text-secondary)'
+                    }}
+                >
+                    <Trophy size={18} style={{ marginRight: 8 }} />
+                    Drivers Championship
+                </button>
+                <button 
+                    className={`btn-tab ${view === 'teams' ? 'active' : ''}`}
+                    onClick={() => setView('teams')}
+                    style={{
+                        padding: '10px 24px',
+                        borderRadius: '8px',
+                        fontSize: '1rem',
+                        fontWeight: 600,
+                        transition: 'all 0.3s ease',
+                        border: 'none',
+                        cursor: 'pointer',
+                        background: view === 'teams' ? 'var(--accent-red)' : 'rgba(225, 6, 0, 0.1)',
+                        color: view === 'teams' ? '#fff' : 'var(--text-secondary)'
+                    }}
+                >
+                    <Shield size={18} style={{ marginRight: 8 }} />
+                    Constructors Championship
+                </button>
             </div>
 
-            {/* Standings Card */}
-            <Card style={{ padding: 0, overflow: 'hidden' }}>
-                <div className="table-container wide" style={{ border: 'none', borderRadius: 0 }}>
-                    <table className="table-compact">
-                        <thead>
-                            <tr>
-                                <th style={{ width: '60px', paddingLeft: '24px' }}>POS</th>
-                                <th>{view === 'drivers' ? 'DRIVER' : 'TEAM'}</th>
-                                {view === 'drivers' && <th className="hidden-mobile">TEAM</th>}
-                                <th className="hidden-mobile">WINS</th>
-                                <th className="text-right" style={{ paddingRight: '24px' }}>POINTS</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {data.map((item: any) => (
-                                <tr
-                                    key={item.position}
-                                    className={`table-row-hover ${view === 'drivers' ? 'clickable' : ''}`}
-                                    onClick={() => {
-                                        if (view === 'drivers' && onDriverSelect && item.driverNumber) {
-                                            onDriverSelect(item.driverNumber);
-                                        }
-                                    }}
-                                    style={{ transition: 'background 0.1s' }}
-                                >
-                                    <td style={{ paddingLeft: '24px' }}>
-                                        <div style={{
-                                            width: '28px',
-                                            height: '28px',
-                                            borderRadius: '50%',
-                                            background: item.position === 1 ? '#FFD700' :
-                                                item.position === 2 ? '#C0C0C0' :
-                                                    item.position === 3 ? '#CD7F32' : 'var(--bg-highlight)',
-                                            color: item.position <= 3 ? '#000' : 'white',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            fontSize: '0.8rem',
-                                            fontWeight: 700
-                                        }}>
-                                            {item.position}
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div className="flex-row items-center" style={{ gap: '16px' }}>
-                                            {view === 'drivers' && (
-                                                <div style={{ position: 'relative' }}>
-                                                    <img
-                                                        src={item.headshotUrl || 'https://via.placeholder.com/40'}
-                                                        alt={item.familyName}
-                                                        className="driver-avatar"
-                                                        style={{ width: '42px', height: '42px', border: `2px solid ${item.teamColor || '#333'}` }}
-                                                    />
-                                                    {item.position === 1 && <Medal size={16} color="#fbbf24" style={{ position: 'absolute', top: -5, right: -5, filter: 'drop-shadow(0 2px 2px rgba(0,0,0,0.5))' }} />}
-                                                </div>
-                                            )}
-                                            <div className="flex-col" style={{ gap: '2px' }}>
-                                                <span style={{ fontWeight: 700, fontSize: '1rem' }}>
-                                                    {view === 'drivers' ? item.broadcastName : item.constructorName}
-                                                </span>
-                                                {view === 'drivers' && (
-                                                    <span className="text-muted mobile-only" style={{ fontSize: '0.8rem' }}>
-                                                        {item.teamName}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </td>
-                                    {view === 'drivers' && (
-                                        <td className="text-muted hidden-mobile" style={{ fontWeight: 500 }}>
-                                            {item.constructorName || item.teamName}
-                                        </td>
-                                    )}
-                                    <td className="hidden-mobile">
-                                        {item.wins > 0 ? (
-                                            <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{item.wins}</span>
-                                        ) : (
-                                            <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+            {/* Table */}
+            <div className="card" style={{ padding: '0', maxWidth: '100%', overflow: 'hidden', borderRadius: '12px' }}>
+                <table className="table-compact table-desktop" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                        <tr style={{ borderBottom: '2px solid var(--border)', backgroundColor: 'var(--bg-subtle)' }}>
+                            <th style={{ padding: '16px 20px', textAlign: 'center', fontWeight: 700, fontSize: '0.85rem', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>POS</th>
+                            <th style={{ padding: '16px 20px', textAlign: 'left', fontWeight: 700, fontSize: '0.85rem', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>{view === 'drivers' ? 'DRIVER' : 'TEAM'}</th>
+                            {view === 'drivers' && <th style={{ padding: '16px 20px', textAlign: 'left', fontWeight: 700, fontSize: '0.85rem', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>TEAM</th>}
+                            <th style={{ padding: '16px 20px', textAlign: 'center', fontWeight: 700, fontSize: '0.85rem', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>WINS</th>
+                            <th style={{ padding: '16px 20px', textAlign: 'center', fontWeight: 700, fontSize: '0.85rem', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>POINTS</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {data.map((item: any, idx) => (
+                            <tr 
+                                key={idx} 
+                                className={`table-row-hover ${view === 'drivers' ? 'clickable-row' : ''}`}
+                                onClick={() => {
+                                    if (view === 'drivers' && onDriverSelect && item.driverNumber) {
+                                        onDriverSelect(item.driverNumber);
+                                    }
+                                }}
+                                style={{ borderBottom: '1px solid var(--border)', transition: 'background-color 0.2s' }}
+                            >
+                                <td style={{ padding: '16px 20px', textAlign: 'center', fontWeight: 700 }}>
+                                    <div style={{
+                                        width: '32px',
+                                        height: '32px',
+                                        borderRadius: '50%',
+                                        background: item.position === 1 ? '#FFD700' : item.position === 2 ? '#C0C0C0' : item.position === 3 ? '#CD7F32' : 'var(--bg-highlight)',
+                                        color: item.position <= 3 ? '#000' : '#fff',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        margin: '0 auto',
+                                        fontSize: '0.9rem',
+                                        fontWeight: 700
+                                    }}>
+                                        {item.position}
+                                    </div>
+                                </td>
+                                <td style={{ padding: '16px 20px' }}>
+                                    <div className="flex-row" style={{ gap: 12, alignItems: 'center' }}>
+                                        {view === 'drivers' && item.headshotUrl && (
+                                            <img src={item.headshotUrl} alt={item.familyName} style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--border)' }} />
                                         )}
+                                        <div>
+                                            <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{view === 'drivers' ? item.broadcastName : item.constructorName}</div>
+                                            {view === 'drivers' && <div className="text-muted" style={{ fontSize: '0.8rem', marginTop: '2px' }}>{item.givenName} {item.familyName}</div>}
+                                        </div>
+                                    </div>
+                                </td>
+                                {view === 'drivers' && (
+                                    <td style={{ padding: '16px 20px', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                                        {item.constructorName || item.teamName || '—'}
                                     </td>
-                                    <td className="text-right" style={{ paddingRight: '24px' }}>
-                                        <span style={{
-                                            fontWeight: 800,
-                                            fontSize: '1.1rem',
-                                            color: item.position <= 3 ? 'var(--accent-red)' : 'var(--text-primary)'
-                                        }}>
-                                            {item.points}
-                                        </span>
-                                        <span className="text-muted text-xs hidden-desktop" style={{ marginLeft: '4px' }}>pts</span>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                                )}
+                                <td style={{ padding: '16px 20px', textAlign: 'center', fontWeight: 600, fontSize: '0.95rem' }}>{item.wins}</td>
+                                <td style={{ padding: '16px 20px', textAlign: 'center', fontWeight: 800, fontSize: '1.05rem', color: item.position <= 3 ? 'var(--accent-red)' : 'inherit' }}>{item.points}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+
+                <div className="mobile-list">
+                    {data.map((item: any, idx) => (
+                        <div 
+                            key={idx} 
+                            className="mobile-row"
+                            onClick={() => {
+                                if (view === 'drivers' && onDriverSelect && item.driverNumber) {
+                                    onDriverSelect(item.driverNumber);
+                                }
+                            }}
+                            style={{ cursor: view === 'drivers' ? 'pointer' : 'default' }}
+                        >
+                            <div className="flex-row justify-between" style={{ width: '100%' }}>
+                                <div className="flex-row" style={{ gap: 12, alignItems: 'center' }}>
+                                    {view === 'drivers' && item.headshotUrl && (
+                                        <img src={item.headshotUrl} alt={item.familyName} className="driver-avatar-small" />
+                                    )}
+                                    <div>
+                                        <div style={{ fontWeight: 700 }}>P{item.position} • {item.points} pts</div>
+                                        <div>{view === 'drivers' ? `${item.givenName} ${item.familyName}` : item.constructorName}</div>
+                                        <div className="text-muted">{view === 'drivers' ? (item.constructorName || item.teamName) : item.nationality}</div>
+                                    </div>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                    <div className="pill ghost">{item.wins} wins</div>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
                 </div>
-            </Card>
-            <style>{`
-                @media (max-width: 768px) {
-                    .hidden-mobile { display: none; }
-                    .mobile-only { display: block; }
-                    .hidden-desktop { display: inline; }
-                }
-                @media (min-width: 769px) {
-                    .mobile-only { display: none; }
-                    .hidden-desktop { display: none; }
-                }
-            `}</style>
+            </div>
         </div>
     );
 };
