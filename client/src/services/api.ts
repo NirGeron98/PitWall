@@ -78,6 +78,65 @@ export const getDriverStats = async (year: number, driverNumber: string): Promis
     return res.data;
 };
 
+// Analysis endpoints
+export interface LapPoint {
+    driverNumber: string;
+    lapNumber: number | null;
+    lapTimeMs: number | null;
+    s1Ms: number | null;
+    s2Ms: number | null;
+    s3Ms: number | null;
+    compound?: string;
+    stint?: number | null;
+    position?: number | null;
+}
+
+export interface TelemetrySeries {
+    distance: number[];
+    speed: number[];
+    throttle: number[];
+    brake: number[];
+    gear: number[];
+    lapNumber?: number | null;
+}
+
+export interface StintInfo {
+    stint: number | null;
+    compound?: string;
+    startLap: number;
+    endLap: number;
+    lapCount: number;
+}
+
+export interface DriverMeta {
+    driverNumber: string;
+    broadcastName: string;
+    fullName: string;
+    teamName: string;
+    teamColor?: string;
+    headshotUrl?: string | null;
+}
+
+export interface LapAnalysisResponse {
+    laps: LapPoint[];
+    drivers: DriverMeta[];
+}
+
+export const getLapAnalysis = async (year: number, round: number, drivers?: string[]): Promise<LapAnalysisResponse> => {
+    const res = await api.get(`/api/analysis/laps`, { params: { year, round, drivers: drivers?.join(',') } });
+    return res.data;
+};
+
+export const getTelemetryAnalysis = async (year: number, round: number, driver: string, lap?: number): Promise<TelemetrySeries> => {
+    const res = await api.get(`/api/analysis/telemetry`, { params: { year, round, driver, lap } });
+    return res.data;
+};
+
+export const getStintsAnalysis = async (year: number, round: number, driver: string): Promise<StintInfo[]> => {
+    const res = await api.get(`/api/analysis/stints`, { params: { year, round, driver } });
+    return res.data;
+};
+
 // --- Auth ---
 export const loginUser = async (email: string, password: string): Promise<AuthResponse> => {
     const res = await api.post(`/auth/login`, { email, password });

@@ -8,19 +8,21 @@ import {
   useLocation,
   useParams,
 } from "react-router-dom";
-import { BarChart2, Flag, Star, Trophy, Users } from "lucide-react";
+import { BarChart2, Flag, Star, Trophy, Users, PieChart } from "lucide-react";
 
 import type { Driver, DriverSeasonStats, RaceEvent } from "./types/f1";
-import { DriverCard } from "./components/DriverCard";
+import type { DriverTeamGroup } from "./pages/DriversPage";
 import { RaceCard } from "./components/RaceCard";
 import { TelemetryModal } from "./components/TelemetryModal";
 import { RaceDetailsModal } from "./components/RaceDetailsModal";
-import { StandingsView } from "./components/StandingsView";
 import { DriverProfile } from "./components/DriverProfile";
-import { DriverCompare } from "./components/DriverCompare";
-import { FavoritesView } from "./components/FavoritesView";
 import { Header } from "./components/Header";
 import { AuthPage } from "./pages/AuthPage";
+import { AnalysisPage } from "./pages/AnalysisPage";
+import { DriversPage } from "./pages/DriversPage";
+import { FavoritesPage } from "./pages/FavoritesPage";
+import { ComparePage } from "./pages/ComparePage";
+import { StandingsPage } from "./pages/StandingsPage";
 import { useData } from "./contexts/DataContext";
 import { useAuth } from "./contexts/AuthContext";
 import { DriverCardSkeleton } from "./components/skeletons/DriverCardSkeleton";
@@ -33,7 +35,8 @@ type View =
   | "standings"
   | "profile"
   | "compare"
-  | "favorites";
+  | "favorites"
+  | "analysis";
 
 const navItems = [
   { label: "Races", path: "/races", icon: Flag },
@@ -41,6 +44,7 @@ const navItems = [
   { label: "Standings", path: "/standings", icon: Trophy },
   { label: "Favorites", path: "/favorites", icon: Star },
   { label: "Compare", path: "/compare", icon: BarChart2 },
+  { label: "Analysis", path: "/analysis", icon: PieChart },
 ];
 
 const DriverProfileScreen: React.FC<{
@@ -114,6 +118,7 @@ function AppShell() {
     if (location.pathname.startsWith("/standings")) return "standings";
     if (location.pathname.startsWith("/favorites")) return "favorites";
     if (location.pathname.startsWith("/compare")) return "compare";
+    if (location.pathname.startsWith("/analysis")) return "analysis";
     return "races";
   }, [location.pathname]);
 
@@ -204,7 +209,8 @@ function AppShell() {
 
   const driversByTeam = useMemo(() => {
     const groups: Record<string, { color: string; drivers: Driver[] }> = {};
-    filteredDrivers.forEach((d) => {
+    const filtered = filteredDrivers;
+    filtered.forEach((d) => {
       const key = d.TeamName || "Unknown";
       if (!groups[key]) {
         groups[key] = { color: d.TeamColor, drivers: [] };
@@ -314,7 +320,7 @@ function AppShell() {
         navItems={navItems}
       />
 
-      <main className="container app-main">
+      <main className={`container app-main ${activeView === "analysis" ? "app-main--wide" : ""}`}>
           <div style={{ textAlign: "center" }}>
             <div className="page-header-enhanced">
               <div className="header-bg">
@@ -335,6 +341,7 @@ function AppShell() {
                   {activeView === "standings" && "Standings"}
                   {activeView === "favorites" && "Favorites"}
                   {activeView === "compare" && "Compare"}
+                  {activeView === "analysis" && "Analysis"}
                 </h1>
                 <div className="title-accent">
                   <div className="accent-line"></div>
@@ -396,51 +403,16 @@ function AppShell() {
               <Route
                 path="/drivers"
                 element={
-                  <div className="team-grid">
-                    {driversByTeam.map((group) => (
-                      <div key={group.team} className="team-card">
-                        <div className="team-header">
-                          <div
-                            className="team-swatch"
-                            style={{ background: group.color }}
-                          />
-                          <h3 style={{ margin: 0 }}>{group.team}</h3>
-                        </div>
-                        <div className="team-drivers">
-                          {group.drivers.map((driver) => (
-                            <DriverCard
-                              key={driver.DriverNumber}
-                              driver={driver}
-                              isFavorite={favoriteDriverIds.includes(
-                                driver.DriverNumber
-                              )}
-                              onToggleFavorite={handleToggleFavorite}
-                              onClick={(d) =>
-                                navigate(`/drivers/${d.DriverNumber}`)
-                              }
-                              onOpenTelemetry={handleTelemetryOpen}
-                              isCompared={compareSelection.includes(
-                                driver.DriverNumber
-                              )}
-                              onToggleCompare={toggleCompare}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                    {filteredDrivers.length === 0 && (
-                      <div
-                        style={{
-                          gridColumn: "1/-1",
-                          textAlign: "center",
-                          padding: "64px",
-                          color: "var(--text-secondary)",
-                        }}
-                      >
-                        No drivers found.
-                      </div>
-                    )}
-                  </div>
+                  <DriversPage
+                    groups={driversByTeam as DriverTeamGroup[]}
+                    favoriteDriverIds={favoriteDriverIds}
+                    onToggleFavorite={handleToggleFavorite}
+                    onNavigateDriver={(num) => navigate(`/drivers/${num}`)}
+                    onOpenTelemetry={handleTelemetryOpen}
+                    compareSelection={compareSelection}
+                    onToggleCompare={toggleCompare}
+                    hasDrivers={filteredDrivers.length > 0}
+                  />
                 }
               />
 
@@ -458,7 +430,7 @@ function AppShell() {
               <Route
                 path="/favorites"
                 element={
-                  <FavoritesView
+                  <FavoritesPage
                     drivers={drivers}
                     favoriteDriverIds={favoriteDriverIds}
                     onToggleFavorite={handleToggleFavorite}
@@ -473,7 +445,7 @@ function AppShell() {
               <Route
                 path="/compare"
                 element={
-                  <DriverCompare
+                  <ComparePage
                     drivers={selectedCompareDrivers}
                     statsMap={compareStats}
                     loading={compareLoading}
@@ -488,13 +460,15 @@ function AppShell() {
               <Route
                 path="/standings"
                 element={
-                  <StandingsView
+                  <StandingsPage
                     onDriverSelect={(driverNumber) =>
                       navigate(`/drivers/${driverNumber}`)
                     }
                   />
                 }
               />
+
+              <Route path="/analysis" element={<AnalysisPage />} />
             </Routes>
           )}
         </div>

@@ -101,6 +101,12 @@ button {
   padding: 0 var(--space-6);
 }
 
+/* Allow wider main content for analysis route */
+.app-main.app-main--wide {
+  max-width: none;
+  width: 100%;
+}
+
 /* Flex & Grid */
 .flex-row {
   display: flex;
@@ -207,6 +213,85 @@ button {
   max-width: 1400px;
   margin: 0 auto;
   padding: 0 var(--space-2);
+}
+
+.analysis-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 0 var(--space-4);
+}
+
+.analysis-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-4);
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.control-group label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.control-group select {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+
+.analysis-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--space-6);
+}
+
+.analysis-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.analysis-card.wide {
+  grid-column: span 2;
+}
+
+.analysis-card .card-subtitle {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin-top: -4px;
+}
+
+.card-header-lite {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.chart-container {
+  width: 100%;
+  height: 100%;
+}
+
+@media (max-width: 900px) {
+  .analysis-card.wide {
+    grid-column: span 1;
+  }
 }
 
 @media (max-width: 1200px) {
