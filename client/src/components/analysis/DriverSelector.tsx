@@ -11,11 +11,12 @@ interface TopDriverData {
     driverNumber: string;
     best: number;
     consistency: number;
-    color: string;
+    color: string; // Team color
     avg: number;
     median: number;
     laps: number;
     improvementRate: number | null;
+    imageUrl?: string; // Small driver headshot
 }
 
 interface DriverSelectorProps {
@@ -34,10 +35,9 @@ export const DriverSelector: React.FC<DriverSelectorProps> = ({
     toggleDriver 
 }) => {
     // UI strings in English (User Messages)
-    const UI_TITLE = "Click to Select for Drivers";
+    const UI_TITLE = "Click to Select Drivers";
     const UI_RANK = "P";
-    const UI_CONSISTENCY = "Consistency (σ):";
-    const UI_MAX_ALERT = "⚠️ Maximum 4 drivers selected. Deselect one to choose another.";
+    const UI_MAX_ALERT = "⚠️ Maximum 12 drivers selected. Deselect one to choose another.";
 
     return (
         <div style={{
@@ -56,7 +56,7 @@ export const DriverSelector: React.FC<DriverSelectorProps> = ({
                     {UI_TITLE}
                 </h2>
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px' }}>
                 {topDrivers.map((driverData, index) => {
                     const isSelected = selectedDrivers.includes(driverData.driverNumber);
                     return (
@@ -69,32 +69,53 @@ export const DriverSelector: React.FC<DriverSelectorProps> = ({
                                     : 'rgba(255, 255, 255, 0.03)',
                                 border: `2px solid ${isSelected ? driverData.color : 'rgba(255, 255, 255, 0.1)'}`,
                                 borderRadius: '12px',
-                                padding: '14px 18px',
+                                padding: '20px 24px',
                                 cursor: 'pointer',
                                 transition: 'all 0.3s ease',
                                 color: isSelected ? '#000' : '#fff',
                                 fontWeight: isSelected ? '700' : '500',
-                                fontSize: '14px',
+                                fontSize: '16px',
                                 display: 'flex',
                                 flexDirection: 'column',
                                 alignItems: 'flex-start',
-                                gap: '4px',
-                                minWidth: '140px',
+                                gap: '6px',
+                                minWidth: '190px',
                                 boxShadow: isSelected ? `0 4px 20px ${driverData.color}40` : 'none',
                                 textAlign: 'left', 
                             }}
                         >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', justifyContent: 'space-between' }}>
-                                <span style={{ flex: 1, textAlign: 'left' }}>{driverData.driver}</span>
-                                <span style={{ fontSize: '11px', opacity: 0.7, fontWeight: '800' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', justifyContent: 'space-between' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                                    {driverData.imageUrl && (
+                                        <img
+                                            src={driverData.imageUrl}
+                                            alt={driverData.driver}
+                                            width={22}
+                                            height={22}
+                                            style={{
+                                                borderRadius: '50%',
+                                                objectFit: 'cover',
+                                                border: `1px solid ${driverData.color}`,
+                                                boxShadow: `0 0 0 2px rgba(255,255,255,0.06)`
+                                            }}
+                                        />
+                                    )}
+                                    <span style={{ 
+                                        flex: 1, 
+                                        textAlign: 'left', 
+                                        color: isSelected ? '#000' : driverData.color, 
+                                        fontWeight: 700,
+                                        textShadow: isSelected ? 'none' : '0 1px 1px rgba(0,0,0,0.25)'
+                                    }}>
+                                        {driverData.driver}
+                                    </span>
+                                </div>
+                                <span style={{ fontSize: '12px', opacity: 0.8, fontWeight: '800' }}>
                                     {UI_RANK}{index + 1}
                                 </span>
                             </div>
-                            <div style={{ fontSize: '13px', opacity: 0.8, fontWeight: '600' }}>
+                            <div style={{ fontSize: '14px', opacity: 0.85, fontWeight: '600' }}>
                                 {formatLapTimeShort(driverData.best)}
-                            </div>
-                            <div style={{ fontSize: '11px', opacity: 0.6 }}>
-                                {UI_CONSISTENCY} {(driverData.consistency / 1000).toFixed(2)}s
                             </div>
                         </button>
                     );

@@ -9,31 +9,24 @@ import {
     Tooltip,
     ResponsiveContainer,
     CartesianGrid,
+    Legend,
     BarChart,
     Bar,
-    AreaChart,
-    Area,
-    Legend,
     Cell,
-    ComposedChart,
-    ReferenceLine
 } from "recharts";
 import { useData } from "../contexts/DataContext";
 import {
     getLapAnalysis,
-    getTelemetryAnalysis,
 } from "../services/api";
 import type {
     DriverMeta,
     LapAnalysisResponse,
     LapPoint,
-    TelemetrySeries,
 } from "../services/api";
-import type { Driver, RaceEvent, RaceResult } from "../types/f1";
+import type { RaceResult } from "../types/f1";
 import { Loading } from "../components/Loading";
 import { ChartCard } from '../components/common/ChartCard';
 import { StatCard } from '../components/common/StatCard';
-import { MiniStat } from '../components/common/MiniStat';
 import { DriverSelector } from '../components/analysis/DriverSelector';
 import {
     formatLapTime, 
@@ -46,11 +39,7 @@ import {
     Activity,
     Gauge,
     Timer,
-    BarChart3,
-    Target,
     Maximize2,
-    Settings,
-    Feather,
 } from "lucide-react";
 
 interface Props {}
@@ -69,11 +58,8 @@ export const AnalysisPage: React.FC<Props> = () => {
     const UI_AVG_LAP = "AVERAGE LAP";
     const UI_AVG_LAP_SUB = "across all drivers";
     const UI_FASTEST_S1 = "FASTEST SECTOR 1";
-    const UI_FASTEST_S1_SUB = "best opening sector";
     const UI_FASTEST_S2 = "FASTEST SECTOR 2";
-    const UI_FASTEST_S2_SUB = "best middle sector";
     const UI_FASTEST_S3 = "FASTEST SECTOR 3";
-    const UI_FASTEST_S3_SUB = "best final sector";
 
     // Chart Titles
     const UI_LAP_EVOLUTION_TITLE = "Lap Time Evolution";
@@ -81,46 +67,8 @@ export const AnalysisPage: React.FC<Props> = () => {
     const UI_LAP_EVOLUTION_X = "Lap Number";
     const UI_LAP_EVOLUTION_Y = "Lap Time";
 
-    const UI_DISTRIBUTION_TITLE = "Lap Time Distribution";
-    const UI_DISTRIBUTION_SUB = "Consistency analysis";
-    const UI_DISTRIBUTION_X = "Lap Time (seconds)";
-    const UI_DISTRIBUTION_Y = "Frequency";
-    const UI_DISTRIBUTION_TOOLTIP_COUNT = "Laps";
-    const UI_DISTRIBUTION_TOOLTIP_RANGE = "Second Range:";
-
-    const UI_PACE_DELTA_TITLE = "Pace Delta (vs fastest)";
-    const UI_PACE_DELTA_SUB = "Gap to session-best lap, lower is better";
-
-    // Telemetry Titles & Labels
-    const UI_TELEMETRY_TITLE = "Driver Performance Details";
-    const UI_TELEMETRY_SUB = "How the driver performed around the circuit on their fastest lap";
-    const UI_SLOW_ZONES = "Slow Corners";
-    const UI_SLOW_ZONES_SUB = "tight turns and hairpins";
-    const UI_MEDIUM_ZONES = "Technical Sections";
-    const UI_MEDIUM_ZONES_SUB = "medium-speed corners";
-    const UI_FAST_ZONES = "High-Speed Zones";
-    const UI_FAST_ZONES_SUB = "straights and fast corners";
-    const UI_IMPROVEMENT_RATE = "Pace Improvement";
-    const UI_IMPROVEMENT_RATE_SUB = "first 5 laps vs last 5 laps";
-
-    const UI_SPEED_BRAKE_TITLE = "Speed Profile Around The Track";
-    const UI_SPEED_BRAKE_SUB = "Where the driver speeds up and slows down";
-    const UI_DISTANCE_X = "Track Position";
-    const UI_SPEED_Y = 'Speed (km/h)';
-    const UI_CONTROLS_Y = 'Input (%)';
-    const UI_SPEED_NAME = "Speed";
-    const UI_BRAKE_NAME = "Braking";
-    const UI_THROTTLE_NAME = "Throttle";
-
-    const UI_GEAR_TITLE = "Gear Usage Distribution";
-    const UI_GEAR_SUB = "How much time spent in each gear";
-    const UI_GEAR_X = "Gear";
-    const UI_GEAR_Y = "Time (%)";
-
     const UI_EMPTY_COMPARISON_TITLE = "Select Drivers to Compare";
     const UI_EMPTY_COMPARISON_P = "Click on one or more drivers above to see lap-by-lap comparison.";
-    const UI_TELEMETRY_ALERT_TITLE = "Telemetry Analysis Available for Single Driver Only";
-    const UI_TELEMETRY_ALERT_P = "Deselect other drivers to view the speed, throttle, and brake data for one driver.";
     
     // State and Context initialization
     const { year, races, drivers, loading, fetchSessionResultsWithCache } = useData();
@@ -128,9 +76,7 @@ export const AnalysisPage: React.FC<Props> = () => {
     const [selectedDrivers, setSelectedDrivers] = useState<string[]>([]);
     const [lapData, setLapData] = useState<LapPoint[]>([]);
     const [sessionDrivers, setSessionDrivers] = useState<DriverMeta[]>([]);
-    const [telemetry, setTelemetry] = useState<TelemetrySeries | null>(null);
     const [busy, setBusy] = useState(false);
-    const [telemetryLoading, setTelemetryLoading] = useState(false);
     const [raceResults, setRaceResults] = useState<RaceResult[]>([]);
 
     // Initialize defaults (first race)
@@ -180,33 +126,30 @@ export const AnalysisPage: React.FC<Props> = () => {
         loadData();
     }, [year, selectedRound, drivers]);
 
-    // Load telemetry separately (deferred, slow operation)
-    useEffect(() => {
-        if (selectedDrivers.length === 1 && selectedRound !== null) {
-            const loadTelemetry = async () => {
-                setTelemetryLoading(true);
-                try {
-                    const telem = await getTelemetryAnalysis(year, selectedRound, selectedDrivers[0]);
-                    setTelemetry(telem);
-                } catch (err) {
-                    console.error("Telemetry fetch failed", err);
-                    setTelemetry(null);
-                } finally {
-                    setTelemetryLoading(false);
-                }
-            };
-            loadTelemetry();
-        } else {
-            setTelemetry(null);
-            setTelemetryLoading(false);
-        }
-    }, [year, selectedRound, selectedDrivers]);
-
     const raceOptions = races.sort((a, b) => a.RoundNumber - b.RoundNumber);
     
-    const driverByNumber: Record<string, Driver | DriverMeta> = useMemo(() => {
-        const map: Record<string, Driver | DriverMeta> = {};
-        drivers.forEach((d) => (map[d.DriverNumber] = d));
+    const driverByNumber = useMemo(() => {
+        const map: Record<
+            string,
+            {
+                DriverNumber: string;
+                BroadcastName: string;
+                FullName: string;
+                TeamName: string;
+                TeamColor: string;
+                HeadshotUrl?: string;
+            }
+        > = {};
+        drivers.forEach((d) => {
+            map[d.DriverNumber] = {
+                DriverNumber: d.DriverNumber,
+                BroadcastName: d.BroadcastName,
+                FullName: d.FullName,
+                TeamName: d.TeamName,
+                TeamColor: d.TeamColor,
+                HeadshotUrl: d.HeadshotUrl,
+            };
+        });
         sessionDrivers.forEach((d) => {
             if (!map[d.driverNumber]) {
                 map[d.driverNumber] = {
@@ -216,7 +159,7 @@ export const AnalysisPage: React.FC<Props> = () => {
                     TeamName: d.teamName,
                     TeamColor: d.teamColor || "#888",
                     HeadshotUrl: d.headshotUrl || undefined,
-                } as unknown as Driver;
+                };
             }
         });
         return map;
@@ -232,6 +175,7 @@ export const AnalysisPage: React.FC<Props> = () => {
         let overallBest = Number.POSITIVE_INFINITY;
         let overallBestDriver: string | null = null;
         let totalValidLaps = 0;
+        const podium: Record<number, { driver: string; lap: number }> = {};
 
         lapData.forEach((lp) => {
             if (!lp.driverNumber) return;
@@ -250,6 +194,12 @@ export const AnalysisPage: React.FC<Props> = () => {
                 if (lp.lapTimeMs < overallBest) {
                     overallBest = lp.lapTimeMs;
                     overallBestDriver = lp.driverNumber;
+                }
+                const pos = lp.position;
+                if (pos && pos <= 3) {
+                    if (!podium[pos] || lp.lapTimeMs < podium[pos].lap) {
+                        podium[pos] = { driver: lp.driverNumber, lap: lp.lapTimeMs };
+                    }
                 }
             }
         });
@@ -333,6 +283,7 @@ export const AnalysisPage: React.FC<Props> = () => {
             totalLaps: lapData.length,
             totalValidLaps,
             driversCount: Object.keys(driverStats).length,
+            podium,
         };
     }, [lapData]);
 
@@ -452,6 +403,39 @@ export const AnalysisPage: React.FC<Props> = () => {
         return entries;
     }, [stats, driverByNumber, raceResults]);
 
+    // Derived datasets for extra charts
+    const bestLapDelta = useMemo(() => {
+        const pool = selectedDrivers.length
+            ? allDrivers.filter((d) => selectedDrivers.includes(d.driverNumber))
+            : allDrivers.slice(0, 12);
+        const withBest = pool.filter((d) => d.best);
+        if (!withBest.length) return [];
+        const fastest = Math.min(...withBest.map((d) => d.best));
+        return withBest
+            .map((d) => ({
+                driver: d.driver,
+                best: d.best,
+                delta: d.best - fastest,
+                color: d.color,
+            }))
+            .sort((a, b) => a.best - b.best);
+    }, [allDrivers, selectedDrivers]);
+
+    const consistencyData = useMemo(() => {
+        const pool = selectedDrivers.length
+            ? allDrivers.filter((d) => selectedDrivers.includes(d.driverNumber))
+            : allDrivers.slice(0, 12);
+        return pool
+            .filter((d) => Number.isFinite(d.consistency))
+            .map((d) => ({
+                driver: d.driver,
+                consistency: d.consistency,
+                color: d.color,
+            }))
+            .sort((a, b) => (a.consistency ?? 0) - (b.consistency ?? 0));
+    }, [allDrivers, selectedDrivers]);
+
+
     // Get all drivers who have position data for the position chart (derive from positionData keys)
     // Group by team and assign solid/dashed lines
     const driversWithPositions = useMemo(() => {
@@ -524,74 +508,6 @@ export const AnalysisPage: React.FC<Props> = () => {
         );
     }, [positionLegendPayload]);
 
-    // Enhanced telemetry data
-    const telemetryData = useMemo(() => {
-        if (!telemetry) return [];
-        
-        return telemetry.distance.map((d, idx) => {
-            const speed = telemetry.speed[idx];
-            const throttle = telemetry.throttle[idx] * 100;
-            const brake = telemetry.brake[idx];
-            
-            // Calculate approximate acceleration (m/s²)
-            let acceleration = 0;
-            if (idx > 0) {
-                const dSpeed = (speed - telemetry.speed[idx - 1]) * (1000 / 3600); // Convert km/h to m/s
-                const dTime = 0.24; // Assuming ~240ms sample rate
-                acceleration = dSpeed / dTime;
-            }
-
-            return {
-                distance: Math.round(d),
-                speed,
-                throttle,
-                brake: brake > 0 ? 100 : 0,
-                brakeRaw: brake,
-                acceleration: Math.max(-15, Math.min(15, acceleration)), // Clamp for visualization
-            };
-        });
-    }, [telemetry]);
-
-    // Gear analysis
-    const gearAnalysis = useMemo(() => {
-        if (!telemetry) return [];
-        
-        const gearTime: Record<number, number> = {};
-        telemetry.speed.forEach((_, idx) => {
-            // Mock gear data based on speed (Replace with actual gear data when available)
-            const speed = telemetry.speed[idx];
-            const gear = speed < 80 ? 1 : speed < 120 ? 2 : speed < 160 ? 3 : 
-                            speed < 200 ? 4 : speed < 250 ? 5 : speed < 300 ? 6 : 7;
-            gearTime[gear] = (gearTime[gear] || 0) + 1;
-        });
-
-        return Object.entries(gearTime)
-            .map(([gear, samples]) => ({
-                gear: parseInt(gear),
-                percentage: (samples / telemetry.speed.length) * 100,
-            }))
-            .sort((a, b) => a.gear - b.gear);
-    }, [telemetry]);
-
-    // Speed zones
-    const speedZones = useMemo(() => {
-        if (!telemetry) return { slow: 0, medium: 0, fast: 0 };
-        
-        let slow = 0, medium = 0, fast = 0;
-        telemetry.speed.forEach(speed => {
-            if (speed < 150) slow++;
-            else if (speed < 250) medium++;
-            else fast++;
-        });
-        
-        const total = telemetry.speed.length;
-        return {
-            slow: (slow / total) * 100,
-            medium: (medium / total) * 100,
-            fast: (fast / total) * 100,
-        };
-    }, [telemetry]);
-
     const toggleDriver = (driverNum: string) => {
         setSelectedDrivers((prev) => {
             if (prev.includes(driverNum)) {
@@ -611,21 +527,89 @@ export const AnalysisPage: React.FC<Props> = () => {
             background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
             direction: 'ltr',
         }}>
-            {/* Header */}
-            <div style={{ marginBottom: '32px', textAlign: 'center' }}>
-                <h1 style={{ 
-                    fontSize: '36px', 
-                    fontWeight: '800', 
-                    color: '#fff',
-                    marginBottom: '8px',
-                    textTransform: 'uppercase',
-                    letterSpacing: '1px',
-                }}>
-                    {UI_HEADER}
-                </h1>
-                <p style={{ fontSize: '16px', color: '#9ca3af' }}>
-                    {UI_SUBHEADER}
-                </p>
+            {/* Header + Top 3 side by side */}
+            <div style={{ 
+                marginBottom: '24px', 
+                display: 'grid', 
+                gridTemplateColumns: 'minmax(260px, 340px) 1fr minmax(120px, 260px)',
+                gap: '16px', 
+                alignItems: 'center',
+                justifyItems: 'center'
+            }}>
+                <div
+                    style={{
+                        flex: '0 0 380px',
+                        background: "rgba(255,255,255,0.02)",
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        borderRadius: "12px",
+                        padding: "14px 16px",
+                        maxWidth: "420px"
+                    }}
+                >
+                    <div
+                        style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            marginBottom: "8px",
+                            color: "#e5e7eb",
+                            fontWeight: 700,
+                            letterSpacing: "-0.02em",
+                        }}
+                    >
+                        <TrendingUp size={16} />
+                        <span>Top 3 Finishing Order</span>
+                    </div>
+                    <table
+                        style={{
+                            width: "100%",
+                            borderCollapse: "collapse",
+                            color: "#e5e7eb",
+                            fontSize: "14px",
+                        }}
+                    >
+                        <thead>
+                            <tr style={{ color: "#9ca3af", textTransform: "uppercase", fontSize: "11px" }}>
+                                <th style={{ textAlign: "left", padding: "6px" }}>Position</th>
+                                <th style={{ textAlign: "left", padding: "6px" }}>Driver</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {[1, 2, 3].map((pos) => {
+                                const entry = stats.podium[pos];
+                                const name =
+                                    entry && entry.driver
+                                        ? driverByNumber[entry.driver]?.BroadcastName || entry.driver
+                                        : "--";
+                                return (
+                                    <tr key={pos} style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                                        <td style={{ padding: "8px 6px", fontWeight: 700 }}>{`P${pos}`}</td>
+                                        <td style={{ padding: "8px 6px" }}>{name}</td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div style={{ width: '100%', maxWidth: '720px', textAlign: 'center' }}>
+                    <h1 style={{ 
+                        fontSize: '42px', 
+                        fontWeight: '800', 
+                        color: '#fff',
+                        marginBottom: '8px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '1px',
+                    }}>
+                        {UI_HEADER}
+                    </h1>
+                    <p style={{ fontSize: '17px', color: '#d1d5db', margin: 0 }}>
+                        {UI_SUBHEADER}
+                    </p>
+                </div>
+
+                {/* Spacer to keep title centered relative to the table on the left */}
+                <div style={{ width: '100%', maxWidth: '260px' }} />
             </div>
 
             {/* Race Selector */}
@@ -668,9 +652,9 @@ export const AnalysisPage: React.FC<Props> = () => {
                     {/* Stats Cards */}
                     <div style={{
                         display: 'grid',
-                        gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-                        gap: '20px',
-                        marginBottom: '32px',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                        gap: '16px',
+                        marginBottom: '20px',
                     }}>
                         <StatCard
                             title={UI_FASTEST_LAP}
@@ -708,6 +692,66 @@ export const AnalysisPage: React.FC<Props> = () => {
                             color="#8b5cf6"
                         />
                     </div>
+
+                    {/* Position Changes Chart - always near top */}
+                    {!loading && positionData.length > 0 && (
+                        <ChartCard
+                            title="Position Changes"
+                            subtitle="How all drivers moved through the field during the race"
+                            Icon={TrendingUp}
+                            span={12}
+                        >
+                            <ResponsiveContainer width="100%" height={600}>
+                                <LineChart
+                                    data={positionData}
+                                    margin={{ top: 20, right: 200, left: 60, bottom: 60 }}
+                                >
+                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                                    <XAxis
+                                        dataKey="lap"
+                                        type="number"
+                                        domain={['dataMin', 'dataMax']}
+                                        tick={{ fill: '#9ca3af', fontSize: 12 }}
+                                        label={{ value: 'Lap Number', position: 'insideBottom', offset: -10, fill: '#9ca3af' }}
+                                    />
+                                    <YAxis
+                                        reversed={true}
+                                        domain={[1, 20]}
+                                        ticks={[1, 5, 10, 15, 20]}
+                                        tick={{ fill: '#9ca3af', fontSize: 12 }}
+                                        label={{ value: 'Position', angle: -90, position: 'insideLeft', fill: '#9ca3af' }}
+                                    />
+                                    <Tooltip content={renderPositionTooltip} />
+                                    <Legend 
+                                        verticalAlign="top" 
+                                        align="right"
+                                        layout="vertical"
+                                        content={renderPositionLegend}
+                                        wrapperStyle={{ 
+                                            paddingLeft: '30px',
+                                            paddingTop: '6px',
+                                            fontSize: '12px',
+                                            maxHeight: '550px',
+                                            overflowY: 'auto'
+                                        }}
+                                    />
+                                    {driversWithPositions.map((driverInfo) => (
+                                        <Line
+                                            key={driverInfo.driverNumber}
+                                            type="stepAfter"
+                                            dataKey={driverInfo.driverNumber}
+                                            stroke={driverInfo.color}
+                                            strokeWidth={2}
+                                            strokeDasharray={driverInfo.isDashed ? "5 5" : undefined}
+                                            dot={false}
+                                            name={driverInfo.driver}
+                                            connectNulls={false}
+                                        />
+                                    ))}
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </ChartCard>
+                    )}
 
                     {/* Driver Selector */}
                     <DriverSelector
@@ -772,266 +816,92 @@ export const AnalysisPage: React.FC<Props> = () => {
                             </ChartCard>
                         )}
 
-                        {/* Position Changes Chart - Full Width, All Drivers */}
-                        {!loading && positionData.length > 0 && (
+                        {/* Additional comparison visuals */}
+                        {bestLapDelta.length > 0 && (
                             <ChartCard
-                                title="Position Changes"
-                                subtitle="How all drivers moved through the field during the race"
+                                title="Fastest Lap Delta"
+                                subtitle="How far each driver is from the quickest lap"
                                 Icon={TrendingUp}
-                                span={12}
+                                span={6}
                             >
-                                <ResponsiveContainer width="100%" height={600}>
-                                    <LineChart
-                                        data={positionData}
-                                        margin={{ top: 20, right: 200, left: 60, bottom: 60 }}
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart
+                                        layout="vertical"
+                                        data={bestLapDelta}
+                                        margin={{ top: 16, right: 24, left: 32, bottom: 16 }}
                                     >
-                                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                                         <XAxis
-                                            dataKey="lap"
                                             type="number"
-                                            domain={['dataMin', 'dataMax']}
-                                            tick={{ fill: '#9ca3af', fontSize: 12 }}
-                                            label={{ value: 'Lap Number', position: 'insideBottom', offset: -10, fill: '#9ca3af' }}
+                                            tickFormatter={(v) => (v === 0 ? "0" : "+" + formatLapTimeShort(v))}
+                                            tick={{ fill: "#9ca3af", fontSize: 12 }}
                                         />
                                         <YAxis
-                                            reversed={true}
-                                            domain={[1, 20]}
-                                            ticks={[1, 5, 10, 15, 20]}
-                                            tick={{ fill: '#9ca3af', fontSize: 12 }}
-                                            label={{ value: 'Position', angle: -90, position: 'insideLeft', fill: '#9ca3af' }}
+                                            type="category"
+                                            dataKey="driver"
+                                            tick={{ fill: "#e5e7eb", fontSize: 12, fontWeight: 600 }}
+                                            width={110}
                                         />
-                                        <Tooltip content={renderPositionTooltip} />
-                                        <Legend 
-                                            verticalAlign="top" 
-                                            align="right"
-                                            layout="vertical"
-                                            content={renderPositionLegend}
-                                            wrapperStyle={{ 
-                                                paddingLeft: '30px',
-                                                paddingTop: '6px',
-                                                fontSize: '12px',
-                                                maxHeight: '550px',
-                                                overflowY: 'auto'
+                                        <Tooltip
+                                            contentStyle={{ background: "rgba(0,0,0,0.9)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 10 }}
+                                            formatter={(v, key, item: any) => {
+                                                if (key === "delta") return ["+" + formatLapTimeShort(Number(v)), "Delta"];
+                                                return [formatLapTimeShort(Number(v)), "Best Lap"];
                                             }}
+                                            labelFormatter={(label) => label}
                                         />
-                                        {driversWithPositions.map((driverInfo) => (
-                                            <Line
-                                                key={driverInfo.driverNumber}
-                                                type="stepAfter"
-                                                dataKey={driverInfo.driverNumber}
-                                                stroke={driverInfo.color}
-                                                strokeWidth={2}
-                                                strokeDasharray={driverInfo.isDashed ? "5 5" : undefined}
-                                                dot={false}
-                                                name={driverInfo.driver}
-                                                connectNulls={false}
-                                            />
-                                        ))}
-                                    </LineChart>
+                                        <Bar dataKey="delta" radius={[0, 6, 6, 0]}>
+                                            {bestLapDelta.map((entry, index) => (
+                                                <Cell key={index} fill={entry.color || "#60a5fa"} />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </ChartCard>
+                        )}
+
+                        {consistencyData.length > 0 && (
+                            <ChartCard
+                                title="Consistency (Std Dev)"
+                                subtitle="Lower is smoother pace across the race"
+                                Icon={Activity}
+                                span={6}
+                            >
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart
+                                        layout="vertical"
+                                        data={consistencyData}
+                                        margin={{ top: 16, right: 24, left: 32, bottom: 16 }}
+                                    >
+                                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                                        <XAxis
+                                            type="number"
+                                            tickFormatter={(v) => formatLapTimeShort(v)}
+                                            tick={{ fill: "#9ca3af", fontSize: 12 }}
+                                        />
+                                        <YAxis
+                                            type="category"
+                                            dataKey="driver"
+                                            tick={{ fill: "#e5e7eb", fontSize: 12, fontWeight: 600 }}
+                                            width={110}
+                                        />
+                                        <Tooltip
+                                            contentStyle={{ background: "rgba(0,0,0,0.9)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 10 }}
+                                            formatter={(v) => formatLapTimeShort(Number(v))}
+                                            labelFormatter={(label) => label}
+                                        />
+                                        <Bar dataKey="consistency" radius={[0, 6, 6, 0]}>
+                                            {consistencyData.map((entry, index) => (
+                                                <Cell key={index} fill={entry.color || "#22c55e"} />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
                                 </ResponsiveContainer>
                             </ChartCard>
                         )}
 
                     </div>
 
-                    {/* Telemetry Analysis - Single Driver */}
-                    {selectedDrivers.length === 1 && (
-                        <div style={{
-                            background: 'rgba(255, 255, 255, 0.02)',
-                            backdropFilter: 'blur(20px)',
-                            border: '1px solid rgba(255, 255, 255, 0.08)',
-                            borderRadius: '16px',
-                            padding: '28px',
-                            marginBottom: '24px',
-                            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
-                        }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px', direction: 'ltr' }}>
-                                <Gauge size={24} color="#8b5cf6" />
-                                <h2 style={{ fontSize: '22px', fontWeight: '700', color: '#fff', margin: 0 }}>
-                                    {UI_TELEMETRY_TITLE} — {driverByNumber[selectedDrivers[0]]?.BroadcastName}
-                                </h2>
-                            </div>
-                            <p style={{ fontSize: '14px', color: '#9ca3af', marginBottom: '24px', direction: 'ltr' }}>
-                                {UI_TELEMETRY_SUB}
-                            </p>
-
-                            {telemetryLoading ? (
-                                <div style={{
-                                    padding: '60px 24px',
-                                    textAlign: 'center',
-                                    background: 'rgba(255, 255, 255, 0.02)',
-                                    borderRadius: '12px',
-                                    border: '1px dashed rgba(255, 255, 255, 0.1)',
-                                }}>
-                                    <Zap size={48} color="#9ca3af" style={{ margin: '0 auto 16px', opacity: 0.5 }} />
-                                    <p style={{ fontSize: '15px', color: '#9ca3af', marginBottom: '8px' }}>Loading telemetry data...</p>
-                                    <p style={{ fontSize: '12px', color: '#6b7280' }}>This may take a moment</p>
-                                </div>
-                            ) : telemetry ? (
-                                <>
-                                    {/* Performance Zones Mini Stats */}
-                                    <div style={{
-                                        display: 'grid',
-                                        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                                        gap: '16px',
-                                        marginBottom: '32px',
-                                    }}>
-                                        <div style={{
-                                            padding: '20px',
-                                            background: 'rgba(239, 68, 68, 0.1)',
-                                            border: '1px solid rgba(239, 68, 68, 0.3)',
-                                            borderRadius: '12px',
-                                        }}>
-                                            <div style={{ fontSize: '11px', color: '#ef4444', fontWeight: '600', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{UI_SLOW_ZONES}</div>
-                                            <div style={{ fontSize: '28px', fontWeight: '700', color: '#fff', marginBottom: '2px' }}>{speedZones.slow.toFixed(1)}%</div>
-                                            <div style={{ fontSize: '11px', color: '#9ca3af' }}>{UI_SLOW_ZONES_SUB}</div>
-                                        </div>
-                                        <div style={{
-                                            padding: '20px',
-                                            background: 'rgba(245, 158, 11, 0.1)',
-                                            border: '1px solid rgba(245, 158, 11, 0.3)',
-                                            borderRadius: '12px',
-                                        }}>
-                                            <div style={{ fontSize: '11px', color: '#f59e0b', fontWeight: '600', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{UI_MEDIUM_ZONES}</div>
-                                            <div style={{ fontSize: '28px', fontWeight: '700', color: '#fff', marginBottom: '2px' }}>{speedZones.medium.toFixed(1)}%</div>
-                                            <div style={{ fontSize: '11px', color: '#9ca3af' }}>{UI_MEDIUM_ZONES_SUB}</div>
-                                        </div>
-                                        <div style={{
-                                            padding: '20px',
-                                            background: 'rgba(16, 185, 129, 0.1)',
-                                            border: '1px solid rgba(16, 185, 129, 0.3)',
-                                            borderRadius: '12px',
-                                        }}>
-                                            <div style={{ fontSize: '11px', color: '#10b981', fontWeight: '600', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{UI_FAST_ZONES}</div>
-                                            <div style={{ fontSize: '28px', fontWeight: '700', color: '#fff', marginBottom: '2px' }}>{speedZones.fast.toFixed(1)}%</div>
-                                            <div style={{ fontSize: '11px', color: '#9ca3af' }}>{UI_FAST_ZONES_SUB}</div>
-                                        </div>
-                                        {allDrivers.find((d) => d.driverNumber === selectedDrivers[0])?.improvementRate !== null && (
-                                            <div style={{
-                                                padding: '20px',
-                                                background: allDrivers.find((d) => d.driverNumber === selectedDrivers[0])?.improvementRate! >= 0 
-                                                    ? 'rgba(16, 185, 129, 0.1)' 
-                                                    : 'rgba(239, 68, 68, 0.1)',
-                                                border: allDrivers.find((d) => d.driverNumber === selectedDrivers[0])?.improvementRate! >= 0 
-                                                    ? '1px solid rgba(16, 185, 129, 0.3)' 
-                                                    : '1px solid rgba(239, 68, 68, 0.3)',
-                                                borderRadius: '12px',
-                                            }}>
-                                                <div style={{ 
-                                                    fontSize: '11px', 
-                                                    color: allDrivers.find((d) => d.driverNumber === selectedDrivers[0])?.improvementRate! >= 0 ? '#10b981' : '#ef4444', 
-                                                    fontWeight: '600', 
-                                                    marginBottom: '4px', 
-                                                    textTransform: 'uppercase', 
-                                                    letterSpacing: '0.5px' 
-                                                }}>{UI_IMPROVEMENT_RATE}</div>
-                                                <div style={{ fontSize: '28px', fontWeight: '700', color: '#fff', marginBottom: '2px' }}>
-                                                    {allDrivers.find((d) => d.driverNumber === selectedDrivers[0])?.improvementRate!.toFixed(1) || 0}%
-                                                </div>
-                                                <div style={{ fontSize: '11px', color: '#9ca3af' }}>{UI_IMPROVEMENT_RATE_SUB}</div>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: '24px' }}>
-                                        
-                                        {/* 4. Telemetry Speed, Throttle, Brake */}
-                                        <ChartCard
-                                            title={UI_SPEED_BRAKE_TITLE}
-                                            subtitle={UI_SPEED_BRAKE_SUB}
-                                            Icon={Maximize2}
-                                            span={12}
-                                        >
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <ComposedChart data={telemetryData} margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
-                                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                                                    <XAxis 
-                                                        dataKey="distance" 
-                                                        tick={{ fill: "#9ca3af", fontSize: 12 }}
-                                                        label={{ value: UI_DISTANCE_X, position: 'insideBottom', offset: -5, fill: '#6b7280' }}
-                                                    />
-                                                    <YAxis yAxisId="speed" orientation="left" stroke="#3b82f6" tick={{ fill: "#3b82f6", fontSize: 12 }} label={{ value: UI_SPEED_Y, angle: -90, position: 'insideLeft', fill: '#3b82f6' }} />
-                                                    <YAxis yAxisId="controls" orientation="right" stroke="#10b981" tick={{ fill: "#10b981", fontSize: 12 }} label={{ value: UI_CONTROLS_Y, angle: 90, position: 'insideRight', fill: '#10b981' }} />
-                                                    <Tooltip
-                                                        contentStyle={{ background: 'rgba(0, 0, 0, 0.95)', border: '1px solid rgba(255, 255, 255, 0.2)', borderRadius: '10px', padding: '12px' }}
-                                                        formatter={(value: any, name: string) => [`${value.toFixed(1)}`, name]}
-                                                        labelFormatter={(l) => `${UI_DISTANCE_X}: ${l}`}
-                                                    />
-                                                    <Legend />
-                                                    
-                                                    <Area 
-                                                        yAxisId="speed"
-                                                        type="monotone" 
-                                                        dataKey="speed" 
-                                                        stroke="#3b82f6" 
-                                                        fill="#3b82f633" 
-                                                        name={UI_SPEED_NAME}
-                                                        strokeWidth={2}
-                                                    />
-                                                    <Line 
-                                                        yAxisId="controls"
-                                                        type="monotone" 
-                                                        dataKey="throttle" 
-                                                        stroke="#10b981" 
-                                                        strokeWidth={1.5}
-                                                        dot={false}
-                                                        name={UI_THROTTLE_NAME}
-                                                    />
-                                                    <Line 
-                                                        yAxisId="controls"
-                                                        type="monotone" 
-                                                        dataKey="brake" 
-                                                        stroke="#ef4444" 
-                                                        strokeWidth={2}
-                                                        dot={false}
-                                                        name={UI_BRAKE_NAME}
-                                                    />
-                                                </ComposedChart>
-                                            </ResponsiveContainer>
-                                        </ChartCard>
-
-                                        {/* 5. Gear Usage */}
-                                        <ChartCard
-                                            title={UI_GEAR_TITLE}
-                                            subtitle={UI_GEAR_SUB}
-                                            Icon={Settings}
-                                            span={12}
-                                        >
-                                            <ResponsiveContainer width="100%" height={300}>
-                                                <BarChart data={gearAnalysis} margin={{ top: 10, right: 40, left: 40, bottom: 20 }}>
-                                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                                                    <XAxis 
-                                                        dataKey="gear" 
-                                                        tick={{ fill: "#9ca3af", fontSize: 14 }}
-                                                        label={{ value: UI_GEAR_X, position: 'insideBottom', offset: -10, fill: '#9ca3af', fontSize: 14 }}
-                                                    />
-                                                    <YAxis 
-                                                        tick={{ fill: "#9ca3af", fontSize: 14 }}
-                                                        tickFormatter={(v) => `${v.toFixed(0)}%`}
-                                                        label={{ value: UI_GEAR_Y, angle: -90, position: 'insideLeft', fill: '#9ca3af', fontSize: 14 }}
-                                                    />
-                                                    <Tooltip
-                                                        contentStyle={{ background: 'rgba(0, 0, 0, 0.95)', border: '1px solid rgba(255, 255, 255, 0.2)', borderRadius: '10px', padding: '12px' }}
-                                                        formatter={(value: any) => [`${value.toFixed(1)}%`, 'Time in Gear']}
-                                                        labelFormatter={(l) => `Gear ${l}`}
-                                                    />
-                                                    <Bar 
-                                                        dataKey="percentage" 
-                                                        name="Time in Gear"
-                                                        radius={[8, 8, 0, 0]}
-                                                    >
-                                                        {gearAnalysis.map((entry, index) => (
-                                                            <Cell key={`cell-${index}`} fill={`hsl(${120 + (entry.gear * 30)}, 70%, 50%)`} />
-                                                        ))}
-                                                    </Bar>
-                                                </BarChart>
-                                            </ResponsiveContainer>
-                                        </ChartCard>
-                                    </div>
-                                </>
-                            ) : null}
-                        </div>
-                    )}
                     
                     {/* Empty State for Comparison */}
                     {selectedDrivers.length === 0 && (
@@ -1053,25 +923,6 @@ export const AnalysisPage: React.FC<Props> = () => {
                         </div>
                     )}
                     
-                    {/* Telemetry requires one driver */}
-                    {selectedDrivers.length > 1 && (
-                        <div style={{
-                            gridColumn: 'span 12',
-                            background: 'rgba(239, 68, 68, 0.05)',
-                            border: '1px solid rgba(239, 68, 68, 0.3)',
-                            borderRadius: '16px',
-                            padding: '24px',
-                            textAlign: 'center',
-                        }}>
-                            <Maximize2 size={24} color="#ef4444" style={{ margin: '0 auto 10px' }} />
-                            <h3 style={{ fontSize: '18px', color: '#ef4444', marginBottom: '8px' }}>
-                                {UI_TELEMETRY_ALERT_TITLE}
-                            </h3>
-                            <p style={{ fontSize: '14px', color: '#fca5a5' }}>
-                                {UI_TELEMETRY_ALERT_P}
-                            </p>
-                        </div>
-                    )}
                 </>
             )}
 
