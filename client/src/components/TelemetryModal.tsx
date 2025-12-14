@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, Activity } from 'lucide-react';
 import { XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, AreaChart, Area } from 'recharts';
-import { getTelemetry, type TelemetryPoint } from '../services/api';
+import { getTelemetry, type TelemetrySeries } from '../services/api';
 import type { Driver } from '../types/f1';
 
 interface Props {
@@ -12,20 +12,40 @@ interface Props {
 }
 
 export const TelemetryModal: React.FC<Props> = ({ isOpen, onClose, driver, year }) => {
-    const [data, setData] = useState<TelemetryPoint[]>([]);
+    const [telemetry, setTelemetry] = useState<TelemetrySeries | null>(null);
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
         if (isOpen && driver) {
             setLoading(true);
             getTelemetry(year, 1, driver.DriverNumber)
-                .then(setData)
+                .then(setTelemetry)
                 .catch(err => console.error("Failed to load telemetry", err))
                 .finally(() => setLoading(false));
         }
     }, [isOpen, driver, year]);
 
     if (!isOpen || !driver) return null;
+
+    const chartData = (() => {
+        if (!telemetry) return [];
+        const len = Math.min(
+            telemetry.distance?.length ?? 0,
+            telemetry.speed?.length ?? 0,
+        );
+        return Array.from({ length: len }, (_, i) => ({
+            distance: telemetry.distance[i],
+            speed: telemetry.speed[i],
+            throttle: telemetry.throttle?.[i],
+            brake: telemetry.brake?.[i],
+            gear: telemetry.gear?.[i],
+        }));
+    })();
+
+    const topSpeed = chartData.length ? Math.max(...chartData.map(d => d.speed ?? 0)) : 0;
+    const avgSpeed = chartData.length
+        ? Math.round(chartData.reduce((sum, d) => sum + (d.speed ?? 0), 0) / chartData.length)
+        : 0;
 
     return (
         <div className="modal-overlay">
@@ -74,19 +94,19 @@ export const TelemetryModal: React.FC<Props> = ({ isOpen, onClose, driver, year 
                                 <div className="card" style={{ padding: '16px', borderLeft: `4px solid ${driver.TeamColor}` }}>
                                     <div className="text-muted text-xs uppercase font-bold mb-2">Top Speed</div>
                                     <div className="text-h2 flex-row items-end" style={{ gap: '4px' }}>
-                                        {data.length > 0 ? Math.max(...data.map(d => d.Speed)) : 0} <span className="text-sm text-muted" style={{ marginBottom: '6px' }}>km/h</span>
+                                        {topSpeed} <span className="text-sm text-muted" style={{ marginBottom: '6px' }}>km/h</span>
                                     </div>
                                 </div>
                                 <div className="card" style={{ padding: '16px', borderLeft: '4px solid var(--accent-blue)' }}>
-                                    <div className="text-muted text-xs uppercase font-bold mb-2">Avg RPM</div>
+                                    <div className="text-muted text-xs uppercase font-bold mb-2">Avg Speed</div>
                                     <div className="text-h2 flex-row items-end" style={{ gap: '4px' }}>
-                                        {data.length > 0 ? Math.round(data.reduce((a, b) => a + b.RPM, 0) / data.length).toLocaleString() : 0}
+                                        {avgSpeed.toLocaleString()} <span className="text-sm text-muted" style={{ marginBottom: '6px' }}>km/h</span>
                                     </div>
                                 </div>
                                 <div className="card" style={{ padding: '16px', borderLeft: '4px solid var(--accent-orange)' }}>
                                     <div className="text-muted text-xs uppercase font-bold mb-2">Telemetry Points</div>
                                     <div className="text-h2 flex-row items-end" style={{ gap: '4px' }}>
-                                        {data.length}
+                                        {chartData.length}
                                     </div>
                                 </div>
                             </div>
@@ -95,7 +115,7 @@ export const TelemetryModal: React.FC<Props> = ({ isOpen, onClose, driver, year 
                             <div className="card" style={{ padding: '24px', height: '400px' }}>
                                 <h3 style={{ marginBottom: '16px', fontSize: '1rem', color: 'var(--text-secondary)' }}>Speed Trace</h3>
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <AreaChart data={data}>
+                                    <AreaChart data={chartData}>
                                         <defs>
                                             <linearGradient id="colorSpeed" x1="0" y1="0" x2="0" y2="1">
                                                 <stop offset="5%" stopColor={driver.TeamColor} stopOpacity={0.3} />
@@ -104,7 +124,7 @@ export const TelemetryModal: React.FC<Props> = ({ isOpen, onClose, driver, year 
                                         </defs>
                                         <CartesianGrid strokeDasharray="3 3" stroke="var(--glass-border)" vertical={false} />
                                         <XAxis
-                                            dataKey="Distance"
+                                            dataKey="distance"
                                             label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fill: 'var(--text-secondary)' }}
                                             tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
                                             axisLine={{ stroke: 'var(--border)' }}
@@ -129,7 +149,7 @@ export const TelemetryModal: React.FC<Props> = ({ isOpen, onClose, driver, year 
                                         />
                                         <Area
                                             type="monotone"
-                                            dataKey="Speed"
+                                            dataKey="speed"
                                             stroke={driver.TeamColor}
                                             strokeWidth={2}
                                             fillOpacity={1}

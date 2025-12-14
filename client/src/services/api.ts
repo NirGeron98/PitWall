@@ -25,28 +25,9 @@ export const getDrivers = async (year: number): Promise<Driver[]> => {
     return res.data;
 };
 
-// New function for Telemetry
-export interface TelemetryPoint {
-    Distance: number;
-    Speed: number;
-    RPM: number;
-    nGear: number;
-}
-
-export const getTelemetry = async (year: number, round: number, driverNumber: string): Promise<TelemetryPoint[]> => {
-    // We default to the last race of the year if round is not specified, 
-    // but for now let's assume we want data from Round 1 (Bahrain) for consistency in this demo
-    // or pass the specific round from the UI.
-    const targetRound = round || 1; 
-    
-    const res = await api.get(`/api/telemetry`, { 
-        params: { 
-            year, 
-            race_round: targetRound, 
-            driver_no: driverNumber 
-        } 
-    });
-    return res.data;
+// Backwards-compatible alias: telemetry lives under /api/analysis/telemetry
+export const getTelemetry = async (year: number, round: number, driverNumber: string): Promise<TelemetrySeries> => {
+    return getTelemetryAnalysis(year, round, driverNumber);
 };
 
 export const getRaceResults = async (year: number, round: number): Promise<RaceResult[]> => {
