@@ -208,8 +208,8 @@ def _load_session_results(year: int, round: int, session_code: str, refresh: boo
     except Exception as e:
         print(f"Could not determine live window: {e}")
 
-    # Only use cached data when explicitly allowed
-    if not refresh and not live_window and not event_finished:
+    # Prefer cached data whenever refresh is False. This avoids reloading FastF1 for finished events.
+    if not refresh:
         cached = (
             db.query(SessionResultModel)
             .filter(
@@ -568,3 +568,43 @@ persist_team_standings = _persist_team_standings
 load_session_results = _load_session_results
 
 to_ms = _to_ms
+
+
+def get_last_completed_round(year: int, db: Session) -> Optional[int]:
+    """
+    Determine the most recently completed round for the given year based on race date.
+    Returns None if no race is in the past yet.
+    """
+    today = datetime.now(timezone.utc).date()
+    races = (
+        db.query(RaceModel)
+        .filter(RaceModel.year == year)
+        .order_by(RaceModel.round.asc())
+        .all()
+    )
+    last_round = None
+    for r in races:
+        try:
+            race_date = datetime.fromisoformat(str(r.date)).date()
+            if race_date <= today:
+                last_round = r.round
+            else:
+                break
+        except Exception:
+            continue
+    return last_round
+
+
+def prewarm_last_completed_race(year: int, db: Session) -> None:
+    """
+    Pre-cache the last completed race results into the DB so API responses are instant.
+    """
+    last_round = get_last_completed_round(year, db)
+    if not last_round:
+        return
+    try:
+        # refresh=False so we reuse cache if already present; otherwise it will fetch once and store.
+        _load_session_results(year, last_round, "R", refresh=False, db=db)
+        print(f"[PREWARM] Cached race results for {year} round {last_round}")
+    except Exception as e:  # pragma: no cover - best effort prewarm
+        print(f"[PREWARM] Failed to cache {year} round {last_round}: {e}")
