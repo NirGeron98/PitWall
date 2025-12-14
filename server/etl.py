@@ -47,42 +47,186 @@ def _to_ms(time_val):
     except Exception:
         return None
 
+
+def _fmt_td(td) -> str | None:
+    """Format Timedelta-like values into FastF1-friendly time strings."""
+    if td is None:
+        return None
+    if isinstance(td, pd.Timedelta) and pd.isna(td):
+        return None
+    if hasattr(td, "total_seconds"):
+        try:
+            total_seconds = td.total_seconds()
+            if pd.isna(total_seconds):
+                return None
+
+            hours, remainder = divmod(int(total_seconds), 3600)
+            minutes, seconds = divmod(remainder, 60)
+            ms = int((total_seconds - int(total_seconds)) * 1000)
+
+            if hours > 0:
+                return f"{hours}:{minutes:02d}:{seconds:02d}.{ms:03d}"
+            return f"{minutes:02d}:{seconds:02d}.{ms:03d}"
+        except (ValueError, TypeError):
+            return None
+
+    return str(td)
+
+
+def _fmt_gap_seconds(td) -> str | None:
+    """Format a Timedelta-like as '+25.000s'."""
+    if td is None:
+        return None
+    if isinstance(td, pd.Timedelta) and pd.isna(td):
+        return None
+    if hasattr(td, "total_seconds"):
+        try:
+            seconds = float(td.total_seconds())
+            if pd.isna(seconds):
+                return None
+            if seconds < 0:
+                seconds = abs(seconds)
+            return f"+{seconds:.3f}s"
+        except (ValueError, TypeError):
+            return None
+    return None
+
 # --- NEW FUNCTION FOR RACE RESULTS ---
-def build_race_results_payload(sess) -> List[Dict[str, Any]]:
+def build_race_results_payload(session) -> List[Dict[str, Any]]:
+    """Build a ready-to-render Race Results classification payload.
+
+    Returns a list of dicts with the normalized keys requested by the frontend:
+      - position ("P1")
+      - driverNumber ("#81")
+      - broadcastName ("O PIASTRI")
+      - fullName ("Oscar Piastri")
+      - teamName ("McLaren")
+      - teamColor ("#FF8700")
+      - time (winner: "1:38:29.849", others: "+25.000s")
+      - status ("Finished", "DNF", "+1 Lap")
+      - points (int)
+      - headshotUrl
+
+    For backwards compatibility with the current client, each dict also includes
+    the legacy FastF1-style capitalized keys (Position, DriverNumber, ...).
     """
-    Builds the main 'Classification' table data.
-    """
-    results_list = []
-    
-    # FastF1 'results' dataframe contains the classification
-    # Make sure we load it first (sess.load handles this usually)
-    if sess.results.empty:
+
+    if session.results is None or session.results.empty:
         return []
 
-    for driver_code in sess.results.index:
-        row = sess.results.loc[driver_code]
-        
-        # Safe extraction of fields
-        results_list.append({
-            "position": str(int(row["Position"])) if not pd.isna(row["Position"]) else "NC",
-            "driverNumber": str(row["DriverNumber"]),
-            "broadcastName": str(row["BroadcastName"]),
-            "fullName": str(row["FullName"]),
-            "teamName": str(row["TeamName"]),
-            "teamColor": f"#{row['TeamColor']}" if row.get("TeamColor") else "#888888",
-            "time": str(row["Time"]) if not pd.isna(row["Time"]) else str(row["Status"]),
-            "status": str(row["Status"]),
-            "points": float(row["Points"]) if not pd.isna(row["Points"]) else 0.0,
-            "gridPosition": int(row["GridPosition"]) if not pd.isna(row["GridPosition"]) else None,
-            "headshotUrl": str(row["HeadshotUrl"]) if row.get("HeadshotUrl") else None
-        })
-        
-    # Sort by position (handling NC/Retirements at the bottom)
-    def sort_key(item):
-        pos = item["position"]
-        return int(pos) if pos.isdigit() else 999
-        
-    return sorted(results_list, key=sort_key)
+    results_df = session.results.fillna("")
+
+    # Determine winner time (if available) for gap calculations.
+    winner_td = None
+    try:
+        winner_row = results_df.loc[results_df["Position"] == 1]
+        if not winner_row.empty:
+            winner_td = winner_row.iloc[0].get("Time")
+    except Exception:
+        winner_td = None
+
+    payload: List[Dict[str, Any]] = []
+
+    for _, row in results_df.iterrows():
+        pos_raw = row.get("Position", "")
+        try:
+            pos_int = int(float(pos_raw))
+        except Exception:
+            pos_int = None
+
+        status = str(row.get("Status", "") or "").strip()
+
+        driver_number_plain = str(row.get("DriverNumber", "") or "").strip()
+        driver_number_hash = f"#{driver_number_plain}" if driver_number_plain else ""
+
+        team_color_raw = str(row.get("TeamColor", "") or "").strip()
+        team_color = f"#{team_color_raw}" if team_color_raw and not team_color_raw.startswith("#") else (team_color_raw or "#888888")
+
+        td = row.get("Time", None)
+
+        # time formatting:
+        # - winner: full race time
+        # - classified finishers: gap like +25.000s (FastF1 sometimes stores gap already)
+        # - lapped/DNF: use status when time is missing
+        time_str = None
+        if pos_int == 1:
+            time_str = _fmt_td(td)
+        else:
+            if status.lower() == "finished" and td is not None:
+                # If FastF1 stores absolute time: compute delta to winner.
+                # If FastF1 stores gap already: use td directly.
+                gap_td = None
+                if winner_td is not None and hasattr(td, "total_seconds") and hasattr(winner_td, "total_seconds"):
+                    try:
+                        gap_td = td - winner_td if td > winner_td else td
+                    except Exception:
+                        gap_td = td
+                else:
+                    gap_td = td
+
+                time_str = _fmt_gap_seconds(gap_td) or _fmt_td(td)
+
+        if not time_str:
+            # For +1 Lap, DNF, DSQ etc we fall back to status.
+            time_str = status or ""
+
+        points_raw = row.get("Points", 0)
+        try:
+            points = int(float(points_raw))
+        except Exception:
+            points = 0
+
+        broadcast_name = str(row.get("BroadcastName", "") or "").strip()
+        full_name = str(row.get("FullName", "") or "").strip()
+        team_name = str(row.get("TeamName", "") or "").strip()
+
+        headshot_url = row.get("HeadshotUrl", None) or None
+        if not headshot_url:
+            # Some FastF1 versions expose headshot/team meta through session.get_driver
+            try:
+                drv = session.get_driver(driver_number_plain)
+                headshot_url = drv.get("HeadshotUrl") if drv else None
+                if not full_name:
+                    full_name = (drv.get("FullName") or "").strip() if drv else full_name
+                if not broadcast_name:
+                    broadcast_name = (drv.get("BroadcastName") or "").strip() if drv else broadcast_name
+                if not team_name:
+                    team_name = (drv.get("TeamName") or "").strip() if drv else team_name
+                if (team_color == "#888888" or not team_color_raw) and drv and drv.get("TeamColor"):
+                    team_color = f"#{drv.get('TeamColor')}"
+            except Exception:
+                headshot_url = None
+
+        normalized_pos = f"P{pos_int}" if pos_int and pos_int > 0 else "NC"
+
+        payload.append(
+            {
+                # New normalized keys
+                "position": normalized_pos,
+                "driverNumber": driver_number_hash,
+                "broadcastName": broadcast_name,
+                "fullName": full_name,
+                "teamName": team_name,
+                "teamColor": team_color,
+                "time": time_str,
+                "status": status,
+                "points": points,
+                "headshotUrl": headshot_url,
+                # Legacy keys used by the existing client
+                "Position": pos_int if pos_int is not None else (str(pos_raw) if pos_raw != "" else ""),
+                "DriverNumber": driver_number_plain,
+                "BroadcastName": broadcast_name,
+                "TeamName": team_name,
+                "Time": _fmt_td(td) or time_str,
+                "Status": status,
+                "Points": points,
+            }
+        )
+
+    payload.sort(
+        key=lambda item: int(item["Position"]) if str(item.get("Position", "")).isdigit() else 999
+    )
+    return payload
 
 
 def build_laps_payload(sess) -> Dict[str, Any]:
