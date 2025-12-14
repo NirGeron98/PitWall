@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { X, Flag, Clock } from 'lucide-react';
 import type { RaceEvent, RaceResult } from '../types/f1';
 import { useData } from '../contexts/DataContext';
+import { getRaceResults } from '../services/api';
 
 interface Props {
     isOpen: boolean;
@@ -79,7 +80,7 @@ export const RaceDetailsModal: React.FC<Props> = ({ isOpen, onClose, race, onDri
         }
         let data: RaceResult[] = [];
         if (sessionCode === 'R') {
-            data = await (await fetch(`http://localhost:8000/api/race-results?year=${year}&round=${race.RoundNumber}`)).json();
+            data = await getRaceResults(year, race.RoundNumber);
         } else {
             data = await fetchSessionResultsWithCache(race.RoundNumber, sessionCode, forceRefresh);
         }

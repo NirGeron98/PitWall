@@ -2,7 +2,7 @@ import axios from 'axios';
 import type { RaceEvent, Driver, RaceResult, DriverSeasonStats, DriverStanding, TeamStanding } from '../types/f1';
 import type { AuthResponse, User, Favorite } from '../types/auth';
 
-const API_URL = 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '';
 const api = axios.create({
     baseURL: API_URL,
 });

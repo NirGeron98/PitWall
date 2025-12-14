@@ -47,9 +47,22 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="PitWall API", lifespan=lifespan)
 
+cors_origins_env = os.getenv("CORS_ORIGINS")
+frontend_url_env = os.getenv("FRONTEND_URL")
+
+if cors_origins_env:
+    allow_origins = [o.strip() for o in cors_origins_env.split(",") if o.strip()]
+elif frontend_url_env:
+    allow_origins = [frontend_url_env.strip()]
+else:
+    allow_origins = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
