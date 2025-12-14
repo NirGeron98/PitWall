@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.core.config import CACHE_DIR
 from app.database import SessionLocal, init_db
 from app.models import (
+    AppCacheModel,
     DriverModel,
     DriverStandingModel,
     RaceModel,
@@ -608,3 +609,36 @@ def prewarm_last_completed_race(year: int, db: Session) -> None:
         print(f"[PREWARM] Cached race results for {year} round {last_round}")
     except Exception as e:  # pragma: no cover - best effort prewarm
         print(f"[PREWARM] Failed to cache {year} round {last_round}: {e}")
+
+
+def cache_races_snapshot(year: int, db: Session) -> list[dict]:
+    """
+    Store a ready-to-serve snapshot of the races list in AppCacheModel.
+    Returns the payload stored.
+    """
+    races = (
+        db.query(RaceModel)
+        .filter(RaceModel.year == year)
+        .order_by(RaceModel.round.asc())
+        .all()
+    )
+    payload = [
+        {
+            "RoundNumber": r.round,
+            "EventName": r.event_name,
+            "Country": r.country,
+            "Location": r.location,
+            "Session5Date": r.date,
+            "EventFormat": r.event_format,
+        }
+        for r in races
+    ]
+
+    key = f"all_races_{year}"
+    existing = db.query(AppCacheModel).filter(AppCacheModel.key == key).first()
+    if existing:
+        existing.data = payload
+    else:
+        db.add(AppCacheModel(key=key, data=payload))
+    db.commit()
+    return payload

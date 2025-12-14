@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import RaceModel
-from app.services.f1_service import load_session_results
+from app.models import AppCacheModel, RaceModel
+from app.services.f1_service import cache_races_snapshot, load_session_results
 
 
 router = APIRouter(prefix="/api", tags=["races"])
@@ -13,18 +13,14 @@ router = APIRouter(prefix="/api", tags=["races"])
 
 @router.get("/races")
 def get_races(year: int, db: Session = Depends(get_db)):
-    races = db.query(RaceModel).filter(RaceModel.year == year).all()
-    return [
-        {
-            "RoundNumber": r.round,
-            "EventName": r.event_name,
-            "Country": r.country,
-            "Location": r.location,
-            "Session5Date": r.date,
-            "EventFormat": r.event_format,
-        }
-        for r in races
-    ]
+    key = f"all_races_{year}"
+    cached = db.query(AppCacheModel).filter(AppCacheModel.key == key).first()
+    if cached and cached.data:
+        return cached.data
+
+    # Fallback: load from races table and persist snapshot for next request
+    payload = cache_races_snapshot(year, db)
+    return payload
 
 
 @router.get("/race-results")

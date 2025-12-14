@@ -15,7 +15,12 @@ from app.routers.auth import router as auth_router
 from app.routers.drivers import router as drivers_router
 from app.routers.races import router as races_router
 from app.routers.user import router as user_router
-from app.services.f1_service import enable_fastf1_cache, prewarm_last_completed_race, run_etl
+from app.services.f1_service import (
+    cache_races_snapshot,
+    enable_fastf1_cache,
+    prewarm_last_completed_race,
+    run_etl,
+)
 
 
 scheduler = BackgroundScheduler()
@@ -32,6 +37,13 @@ async def lifespan(app: FastAPI):
         if db.query(RaceModel).count() == 0:
             print("[INIT] Database empty. Running initial ETL...")
             run_etl()
+        # Cache race list snapshot for current year
+        try:
+            from datetime import datetime
+
+            cache_races_snapshot(datetime.now().year, db)
+        except Exception as e:
+            print(f"[WARN] Race snapshot cache failed: {e}")
         # Prewarm the most recent completed race to speed up the first hit.
         try:
             from datetime import datetime
@@ -45,6 +57,7 @@ async def lifespan(app: FastAPI):
 
     scheduler.add_job(run_etl, "interval", hours=24)
     scheduler.add_job(lambda: prewarm_last_completed_race(datetime.now().year, SessionLocal()), "interval", hours=6)
+    scheduler.add_job(lambda: cache_races_snapshot(datetime.now().year, SessionLocal()), "interval", hours=12)
     scheduler.start()
 
     yield
