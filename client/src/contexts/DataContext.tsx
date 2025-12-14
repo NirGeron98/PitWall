@@ -34,6 +34,8 @@ interface DataContextType {
   fetchSessionResultsWithCache: (round: number, session: string, forceRefresh?: boolean) => Promise<RaceResult[]>;
   primeSeasons: (years: number[]) => Promise<void>;
   prefetchAllData: () => Promise<void>;
+  prefetchRacesForYear: (targetYear?: number) => void;
+  prefetchLastCompletedRaceResults: (targetYear?: number) => void;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -51,7 +53,12 @@ interface DataProviderProps {
   initialYear?: number;
 }
 
-export const DataProvider: React.FC<DataProviderProps> = ({ children, initialYear = 2025 }) => {
+const getDefaultSeasonYear = (): number => {
+  const yr = new Date().getFullYear();
+  return Number.isFinite(yr) && yr >= 1950 ? yr : 2025;
+};
+
+export const DataProvider: React.FC<DataProviderProps> = ({ children, initialYear = getDefaultSeasonYear() }) => {
   const { user } = useAuth();
   const [year, setYear] = useState<number>(initialYear);
   const [races, setRaces] = useState<RaceEvent[]>([]);
@@ -61,6 +68,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, initialYea
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [seasonCache, setSeasonCache] = useState<Record<number, SeasonBundle>>({});
+  const [racesCache, setRacesCache] = useState<Record<number, RaceEvent[]>>({});
 
   // In-memory caches
   const [driverStatsCache, setDriverStatsCache] = useState<DriverStatsCache>({});
@@ -69,6 +77,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, initialYea
   // Deduping in-flight requests
   // We use a mutable ref for in-flight promises because we don't need re-renders on every new request
   const sessionPromiseCache = React.useRef<Record<string, Promise<RaceResult[]>>>({});
+  const racesPromiseCache = React.useRef<Record<string, Promise<RaceEvent[]> | undefined>>({});
 
   const applySeasonToState = (bundle: SeasonBundle) => {
     setRaces(bundle.races);
@@ -81,8 +90,15 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, initialYea
   };
 
   const fetchSeason = async (targetYear: number): Promise<SeasonBundle> => {
+    const racesPromise = racesCache[targetYear]
+      ? Promise.resolve(racesCache[targetYear])
+      : getRaces(targetYear).then((data) => {
+          setRacesCache((prev) => ({ ...prev, [targetYear]: data }));
+          return data;
+        });
+
     const [racesData, driversData, driverStandingsData, teamStandingsData] = await Promise.all([
-      getRaces(targetYear),
+      racesPromise,
       getDrivers(targetYear),
       getDriverStandings(targetYear),
       getTeamStandings(targetYear),
@@ -94,6 +110,64 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, initialYea
       driverStandings: driverStandingsData,
       teamStandings: teamStandingsData,
     };
+  };
+
+  const prefetchRacesForYear = (targetYear: number = year) => {
+    if (!user) return;
+
+    // Already have races for the active year
+    if (targetYear === year && races.length) return;
+
+    const cachedRaces = racesCache[targetYear];
+    if (cachedRaces?.length) {
+      if (targetYear === year && races.length === 0) setRaces(cachedRaces);
+      return;
+    }
+
+    const key = String(targetYear);
+    const inFlight = racesPromiseCache.current[key];
+    if (inFlight) return;
+
+    racesPromiseCache.current[key] = getRaces(targetYear)
+      .then((racesData) => {
+        setRacesCache((prev) => ({ ...prev, [targetYear]: racesData }));
+
+        if (targetYear === year && races.length === 0) {
+          setRaces(racesData);
+        }
+
+        return racesData;
+      })
+      .catch((err) => {
+        console.error('Failed to prefetch races', err);
+        return [];
+      })
+      .finally(() => {
+        delete racesPromiseCache.current[key];
+      });
+  };
+
+  const prefetchLastCompletedRaceResults = (targetYear: number = year) => {
+    if (!user) return;
+
+    // Fire-and-forget: if we have the race list, compute last completed and prefetch Race session.
+    const list = (targetYear === year ? races : racesCache[targetYear]) ?? [];
+    if (!list.length) return;
+
+    const now = Date.now();
+    const completed = list
+      .map((r) => {
+        const d = new Date(String(r.Session5Date ?? ''));
+        return { race: r, time: Number.isNaN(d.getTime()) ? null : d.getTime() };
+      })
+      .filter((x) => x.time !== null && (x.time as number) <= now)
+      .sort((a, b) => (b.race.RoundNumber ?? 0) - (a.race.RoundNumber ?? 0));
+
+    const last = completed[0]?.race;
+    if (!last) return;
+
+    // Uses the existing session cache + in-flight dedupe.
+    void fetchSessionResultsWithCache(last.RoundNumber, 'R', false);
   };
 
   const ensureSeason = async (targetYear: number, applyToState: boolean): Promise<SeasonBundle> => {
@@ -118,6 +192,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, initialYea
       setDriverStatsCache({});
       setSessionCache({});
       setSeasonCache({});
+      setRacesCache({});
       setLoading(false);
       return;
     }
@@ -154,11 +229,16 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, initialYea
     await Promise.all(uniqueYears.map((yr) => ensureSeason(yr, yr === year)));
   };
 
+  // Background prefetch: races (and likely next-click: last completed race results)
   useEffect(() => {
     if (!user) return;
-    const warmYears = Array.from(new Set([year, 2024, 2025]));
-    primeSeasons(warmYears).catch((err) => console.error('Failed to pre-warm seasons', err));
-  }, [user?.id]);
+    prefetchRacesForYear(year);
+  }, [user?.id, year]);
+
+  useEffect(() => {
+    if (!user) return;
+    prefetchLastCompletedRaceResults(year);
+  }, [user?.id, year, races]);
 
   // Fetch driver stats with intelligent caching
   const fetchDriverStatsWithCache = async (
@@ -249,7 +329,9 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, initialYea
         fetchDriverStatsWithCache,
         fetchSessionResultsWithCache,
         primeSeasons,
-        prefetchAllData
+        prefetchAllData,
+        prefetchRacesForYear,
+        prefetchLastCompletedRaceResults,
       }}
     >
       {children}

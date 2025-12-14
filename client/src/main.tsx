@@ -8,7 +8,7 @@ import { AuthProvider } from './contexts/AuthContext.tsx'
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AuthProvider>
-      <DataProvider initialYear={2025}>
+      <DataProvider>
         <App />
       </DataProvider>
     </AuthProvider>

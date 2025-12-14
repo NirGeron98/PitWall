@@ -79,7 +79,6 @@ function AppShell() {
     drivers,
     loading,
     fetchDriverStatsWithCache,
-    primeSeasons,
   } = useData();
 
   const {
@@ -283,13 +282,9 @@ function AppShell() {
 
   const handleLoginSubmit = async (email: string, password: string) => {
     setAuthError(null);
-    setAuthStatus("Initializing telemetry uplink...");
+    setAuthStatus("Authenticating...");
     try {
       await login(email, password);
-      setAuthStatus("Authenticating credentials...");
-      await new Promise((r) => setTimeout(r, 800));
-      setAuthStatus("Pre-loading 2024 + 2025 race intel...");
-      await primeSeasons([2024, 2025]);
       setAuthStatus(null);
       navigate("/races");
     } catch (err) {
@@ -310,7 +305,6 @@ function AppShell() {
     setAuthStatus("Provisioning paddock credentials...");
     try {
       await register(email, password, fullName);
-      await primeSeasons([2024, 2025]);
       setAuthStatus(null);
       navigate("/races");
     } catch (err) {
@@ -396,26 +390,18 @@ function AppShell() {
         </div>
 
         <div className="animate-enter">
-          {loading ? (
-            <div
-              className={
-                activeView === "drivers" ? "drivers-grid" : "races-grid"
-              }
-            >
-              {Array.from({ length: 8 }).map((_, i) =>
-                activeView === "drivers" ? (
-                  <DriverCardSkeleton key={i} />
+          <Routes>
+            <Route path="/" element={<Navigate to="/races" replace />} />
+            <Route
+              path="/races"
+              element={
+                loading && races.length === 0 ? (
+                  <div className="races-grid">
+                    {Array.from({ length: 8 }).map((_, i) => (
+                      <RaceCardSkeleton key={i} />
+                    ))}
+                  </div>
                 ) : (
-                  <RaceCardSkeleton key={i} />
-                )
-              )}
-            </div>
-          ) : (
-            <Routes>
-              <Route path="/" element={<Navigate to="/races" replace />} />
-              <Route
-                path="/races"
-                element={
                   <div className="races-grid">
                     {filteredRaces.map((race) => (
                       <RaceCard
@@ -440,12 +426,20 @@ function AppShell() {
                       </div>
                     )}
                   </div>
-                }
-              />
+                )
+              }
+            />
 
-              <Route
-                path="/drivers"
-                element={
+            <Route
+              path="/drivers"
+              element={
+                loading && drivers.length === 0 ? (
+                  <div className="drivers-grid">
+                    {Array.from({ length: 8 }).map((_, i) => (
+                      <DriverCardSkeleton key={i} />
+                    ))}
+                  </div>
+                ) : (
                   <DriversPage
                     groups={driversByTeam as DriverTeamGroup[]}
                     favoriteDriverIds={favoriteDriverIds}
@@ -456,64 +450,64 @@ function AppShell() {
                     onToggleCompare={toggleCompare}
                     hasDrivers={filteredDrivers.length > 0}
                   />
-                }
-              />
+                )
+              }
+            />
 
-              <Route
-                path="/drivers/:driverNumber"
-                element={
-                  <DriverProfileScreen
-                    drivers={drivers}
-                    loading={loading}
-                    onBack={() => navigate("/drivers")}
-                  />
-                }
-              />
+            <Route
+              path="/drivers/:driverNumber"
+              element={
+                <DriverProfileScreen
+                  drivers={drivers}
+                  loading={loading}
+                  onBack={() => navigate("/drivers")}
+                />
+              }
+            />
 
-              <Route
-                path="/favorites"
-                element={
-                  <FavoritesPage
-                    drivers={drivers}
-                    favoriteDriverIds={favoriteDriverIds}
-                    onToggleFavorite={handleToggleFavorite}
-                    onSelectDriver={(driver) =>
-                      navigate(`/drivers/${driver.DriverNumber}`)
-                    }
-                    onOpenTelemetry={handleTelemetryOpen}
-                  />
-                }
-              />
+            <Route
+              path="/favorites"
+              element={
+                <FavoritesPage
+                  drivers={drivers}
+                  favoriteDriverIds={favoriteDriverIds}
+                  onToggleFavorite={handleToggleFavorite}
+                  onSelectDriver={(driver) =>
+                    navigate(`/drivers/${driver.DriverNumber}`)
+                  }
+                  onOpenTelemetry={handleTelemetryOpen}
+                />
+              }
+            />
 
-              <Route
-                path="/compare"
-                element={
-                  <ComparePage
-                    drivers={selectedCompareDrivers}
-                    statsMap={compareStats}
-                    loading={compareLoading}
-                    onClear={() => {
-                      setCompareSelection([]);
-                      setCompareStats({});
-                    }}
-                  />
-                }
-              />
+            <Route
+              path="/compare"
+              element={
+                <ComparePage
+                  drivers={selectedCompareDrivers}
+                  statsMap={compareStats}
+                  loading={compareLoading}
+                  onClear={() => {
+                    setCompareSelection([]);
+                    setCompareStats({});
+                  }}
+                />
+              }
+            />
 
-              <Route
-                path="/standings"
-                element={
-                  <StandingsPage
-                    onDriverSelect={(driverNumber) =>
-                      navigate(`/drivers/${driverNumber}`)
-                    }
-                  />
-                }
-              />
+            <Route
+              path="/standings"
+              element={
+                <StandingsPage
+                  onDriverSelect={(driverNumber) =>
+                    navigate(`/drivers/${driverNumber}`)
+                  }
+                />
+              }
+            />
 
-              <Route path="/analysis" element={<AnalysisPage />} />
-            </Routes>
-          )}
+            <Route path="/analysis" element={<AnalysisPage />} />
+          </Routes>
         </div>
       </main>
 
@@ -531,101 +525,76 @@ function AppShell() {
         year={year}
       />
 
-      {compareLimitToast && (
+      {compareLimitToast &&
         typeof document !== "undefined" &&
-          createPortal(
+        createPortal(
+          <div
+            onClick={() => setCompareLimitToast(null)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 9999,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "rgba(0,0,0,0.55)",
+              padding: 20,
+            }}
+          >
             <div
+              onClick={(e) => e.stopPropagation()}
               style={{
-                position: "fixed",
-                inset: 0,
-                zIndex: 9999,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
+                width: "min(520px, 92vw)",
+                borderRadius: 16,
+                border: "1px solid var(--glass-border)",
+                background: "var(--glass-bg)",
+                backdropFilter: "blur(18px)",
                 padding: 16,
-                background: "rgba(0,0,0,0.55)",
-                backdropFilter: "blur(6px)",
-                WebkitBackdropFilter: "blur(6px)",
               }}
-              onMouseDown={() => setCompareLimitToast(null)}
             >
               <div
-                className="animate-enter"
                 style={{
-                  width: "min(520px, calc(100vw - 32px))",
-                  borderRadius: 18,
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  background: "rgba(9,9,11,0.92)",
-                  boxShadow: "0 30px 90px rgba(0,0,0,0.65)",
-                  padding: 18,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
                 }}
-                onMouseDown={(e) => e.stopPropagation()}
-                role="dialog"
-                aria-modal="true"
               >
-                <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
-                  <div
-                    style={{
-                      marginTop: 6,
-                      width: 10,
-                      height: 10,
-                      borderRadius: 999,
-                      background: "#ef4444",
-                      boxShadow: "0 0 22px rgba(239,68,68,0.4)",
-                      flex: "0 0 auto",
-                    }}
-                  />
-
-                  <div style={{ flex: "1 1 auto" }}>
-                    <div
-                      style={{
-                        color: "rgba(255,255,255,0.92)",
-                        fontWeight: 900,
-                        fontSize: 18,
-                        letterSpacing: "-0.02em",
-                        marginBottom: 6,
-                      }}
-                    >
-                      Compare limit reached
-                    </div>
-                    <div
-                      style={{
-                        color: "rgba(255,255,255,0.72)",
-                        fontWeight: 600,
-                        fontSize: 15,
-                        lineHeight: 1.35,
-                      }}
-                    >
-                      {compareLimitToast.message}
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setCompareLimitToast(null)}
-                    aria-label="Dismiss"
-                    style={{
-                      width: 34,
-                      height: 34,
-                      borderRadius: 12,
-                      border: "1px solid rgba(255,255,255,0.10)",
-                      background: "rgba(255,255,255,0.04)",
-                      color: "rgba(255,255,255,0.80)",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      cursor: "pointer",
-                      flex: "0 0 auto",
-                    }}
-                  >
-                    <X size={18} />
-                  </button>
+                <div
+                  style={{
+                    color: "rgba(255,255,255,0.72)",
+                    fontWeight: 600,
+                    fontSize: 15,
+                  }}
+                >
+                  {compareLimitToast.message}
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setCompareLimitToast(null)}
+                  className="btn-reset"
+                  aria-label="Dismiss"
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: 12,
+                    border: "1px solid rgba(255,255,255,0.10)",
+                    background: "rgba(255,255,255,0.04)",
+                    color: "rgba(255,255,255,0.80)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                    flex: "0 0 auto",
+                  }}
+                >
+                  <X size={18} />
+                </button>
               </div>
-            </div>,
-            document.body
-          )
-      )}
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

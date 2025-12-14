@@ -1,5 +1,5 @@
 """
-ETL entrypoint for precomputing heavy race/analysis payloads.
+ETL entrypoint for precomputing heavy race/analysis payloads AND Race Results.
 
 Usage (from repo root):
     python server/etl.py --year 2024 --round 1
@@ -29,6 +29,7 @@ from app.models import AppCacheModel  # noqa: E402
 
 
 def _save_cache(db, key: str, payload: Any) -> None:
+    """Helper to upsert JSON payload into DB."""
     existing = db.query(AppCacheModel).filter(AppCacheModel.key == key).first()
     if existing:
         existing.data = payload
@@ -36,6 +37,52 @@ def _save_cache(db, key: str, payload: Any) -> None:
         existing = AppCacheModel(key=key, data=payload)
         db.add(existing)
     db.commit()
+
+
+def _to_ms(time_val):
+    if pd.isna(time_val):
+        return None
+    try:
+        return int(time_val.total_seconds() * 1000)
+    except Exception:
+        return None
+
+# --- NEW FUNCTION FOR RACE RESULTS ---
+def build_race_results_payload(sess) -> List[Dict[str, Any]]:
+    """
+    Builds the main 'Classification' table data.
+    """
+    results_list = []
+    
+    # FastF1 'results' dataframe contains the classification
+    # Make sure we load it first (sess.load handles this usually)
+    if sess.results.empty:
+        return []
+
+    for driver_code in sess.results.index:
+        row = sess.results.loc[driver_code]
+        
+        # Safe extraction of fields
+        results_list.append({
+            "position": str(int(row["Position"])) if not pd.isna(row["Position"]) else "NC",
+            "driverNumber": str(row["DriverNumber"]),
+            "broadcastName": str(row["BroadcastName"]),
+            "fullName": str(row["FullName"]),
+            "teamName": str(row["TeamName"]),
+            "teamColor": f"#{row['TeamColor']}" if row.get("TeamColor") else "#888888",
+            "time": str(row["Time"]) if not pd.isna(row["Time"]) else str(row["Status"]),
+            "status": str(row["Status"]),
+            "points": float(row["Points"]) if not pd.isna(row["Points"]) else 0.0,
+            "gridPosition": int(row["GridPosition"]) if not pd.isna(row["GridPosition"]) else None,
+            "headshotUrl": str(row["HeadshotUrl"]) if row.get("HeadshotUrl") else None
+        })
+        
+    # Sort by position (handling NC/Retirements at the bottom)
+    def sort_key(item):
+        pos = item["position"]
+        return int(pos) if pos.isdigit() else 999
+        
+    return sorted(results_list, key=sort_key)
 
 
 def build_laps_payload(sess) -> Dict[str, Any]:
@@ -70,7 +117,7 @@ def build_laps_payload(sess) -> Dict[str, Any]:
                     "headshotUrl": drv.get("HeadshotUrl"),
                 }
             )
-    except Exception as e:  # pragma: no cover - best effort meta
+    except Exception as e:
         print(f"[cache_laps] driver meta failed: {e}")
 
     return {"laps": payload, "drivers": driver_meta}
@@ -130,18 +177,24 @@ def build_stints_payload(sess, driver: str) -> List[Dict[str, Any]]:
 
 
 def cache_race_analysis(year: int, round_: int) -> None:
-    """Load once from FastF1, then write all heavy payloads into AppCacheModel."""
+    """Load once from FastF1, then write ALL heavy payloads into AppCacheModel."""
     print(f"[ETL] Caching analysis for {year} round {round_}")
     sess = fastf1.get_session(year, round_, "R")
     sess.load(laps=True, telemetry=True, weather=False, messages=False)
 
     db = SessionLocal()
     try:
-        # Laps (all drivers)
+        # 1. Race Results (The Classification Table)
+        results_payload = build_race_results_payload(sess)
+        _save_cache(db, f"race_results_{year}_{round_}", results_payload)
+        print(f"[ETL] Saved race results for {year}/{round_}")
+
+        # 2. Laps (all drivers)
         laps_payload = build_laps_payload(sess)
         _save_cache(db, f"analysis_laps_{year}_{round_}", laps_payload)
+        print(f"[ETL] Saved lap analysis for {year}/{round_}")
 
-        # Per-driver telemetry and stints
+        # 3. Per-driver telemetry and stints
         for code in sess.drivers:
             drv = sess.get_driver(code)
             driver_num = str(drv.get("DriverNumber", code))
@@ -151,17 +204,11 @@ def cache_race_analysis(year: int, round_: int) -> None:
 
             stints_payload = build_stints_payload(sess, driver_num)
             _save_cache(db, f"stints_{year}_{round_}_{driver_num}", stints_payload)
+        
+        print(f"[ETL] Done processing drivers for {year}/{round_}")
+
     finally:
         db.close()
-
-
-def _to_ms(time_val):
-    if pd.isna(time_val):
-        return None
-    try:
-        return int(time_val.total_seconds() * 1000)
-    except Exception:
-        return None
 
 
 def main():
