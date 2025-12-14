@@ -84,7 +84,7 @@ export const Header: React.FC<Props> = ({ year, onYearChange, userEmail, navItem
             <button
               onClick={logout}
               className="btn-reset flex-row items-center hidden-mobile"
-              style={{ color: 'var(--accent-red)', padding: '8px', gap: '6px', fontWeight: 700, whiteSpace: 'nowrap' }}
+              style={{ color: 'var(--accent-red)', padding: '6px 8px', gap: '6px', fontWeight: 700, whiteSpace: 'nowrap', alignItems: 'center' }}
               title="Sign Out"
             >
               <LogOut size={20} className="hover-red" />
@@ -163,6 +163,11 @@ export const Header: React.FC<Props> = ({ year, onYearChange, userEmail, navItem
           grid-template-columns: auto 1fr auto;
           align-items: center;
           gap: 12px;
+        }
+
+        .header-actions button {
+          display: inline-flex;
+          align-items: center;
         }
 
         .header-nav {
@@ -250,7 +255,7 @@ export const Header: React.FC<Props> = ({ year, onYearChange, userEmail, navItem
         }
 
         @media (min-width: 961px) {
-          .mobile-menu-btn { display: none; }
+          .header-actions .mobile-menu-btn { display: none; }
           .mobile-nav-panel { display: none; }
         }
         .hover-red:hover { color: var(--accent-red); }

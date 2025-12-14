@@ -1,4 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   BrowserRouter,
   Routes,
@@ -8,7 +9,7 @@ import {
   useLocation,
   useParams,
 } from "react-router-dom";
-import { BarChart2, Flag, Star, Trophy, Users, PieChart } from "lucide-react";
+import { BarChart2, Flag, Star, Trophy, Users, PieChart, X } from "lucide-react";
 
 import type { Driver, DriverSeasonStats, RaceEvent } from "./types/f1";
 import type { DriverTeamGroup } from "./pages/DriversPage";
@@ -106,11 +107,41 @@ function AppShell() {
   const [selectedDriverForTelemetry, setSelectedDriverForTelemetry] =
     useState<Driver | null>(null);
   const [isTelemetryOpen, setIsTelemetryOpen] = useState(false);
-  const [compareSelection, setCompareSelection] = useState<string[]>([]);
+  const [compareSelection, setCompareSelection] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('pitwall_compare_selection');
+      const parsed = saved ? JSON.parse(saved) : [];
+      return Array.isArray(parsed) ? parsed.slice(0, 3) : [];
+    } catch {
+      return [];
+    }
+  });
   const [compareStats, setCompareStats] = useState<
     Record<string, DriverSeasonStats | null>
   >({});
   const [compareLoading, setCompareLoading] = useState(false);
+  const [compareLimitToast, setCompareLimitToast] = useState<
+    | {
+        id: number;
+        message: string;
+      }
+    | null
+  >(null);
+
+  useEffect(() => {
+    if (!compareLimitToast) return;
+    const t = window.setTimeout(() => setCompareLimitToast(null), 2600);
+    return () => window.clearTimeout(t);
+  }, [compareLimitToast]);
+
+  // Persist compareSelection to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('pitwall_compare_selection', JSON.stringify(compareSelection));
+    } catch (err) {
+      console.error('Failed to save compare selection:', err);
+    }
+  }, [compareSelection]);
 
   const activeView: View = useMemo(() => {
     if (location.pathname.startsWith("/drivers/")) return "profile";
@@ -154,8 +185,14 @@ function AppShell() {
     setCompareSelection((prev) => {
       if (prev.includes(driverNum))
         return prev.filter((id) => id !== driverNum);
-      const max = 4;
-      if (prev.length >= max) return [...prev.slice(-(max - 1)), driverNum];
+      const max = 3;
+      if (prev.length >= max) {
+        setCompareLimitToast({
+          id: Date.now(),
+          message: "You can compare up to 3 drivers at a time.",
+        });
+        return prev;
+      }
       return [...prev, driverNum];
     });
   };
@@ -473,6 +510,102 @@ function AppShell() {
         driver={selectedDriverForTelemetry}
         year={year}
       />
+
+      {compareLimitToast && (
+        typeof document !== "undefined" &&
+          createPortal(
+            <div
+              style={{
+                position: "fixed",
+                inset: 0,
+                zIndex: 9999,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: 16,
+                background: "rgba(0,0,0,0.55)",
+                backdropFilter: "blur(6px)",
+                WebkitBackdropFilter: "blur(6px)",
+              }}
+              onMouseDown={() => setCompareLimitToast(null)}
+            >
+              <div
+                className="animate-enter"
+                style={{
+                  width: "min(520px, calc(100vw - 32px))",
+                  borderRadius: 18,
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "rgba(9,9,11,0.92)",
+                  boxShadow: "0 30px 90px rgba(0,0,0,0.65)",
+                  padding: 18,
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+                role="dialog"
+                aria-modal="true"
+              >
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
+                  <div
+                    style={{
+                      marginTop: 6,
+                      width: 10,
+                      height: 10,
+                      borderRadius: 999,
+                      background: "#ef4444",
+                      boxShadow: "0 0 22px rgba(239,68,68,0.4)",
+                      flex: "0 0 auto",
+                    }}
+                  />
+
+                  <div style={{ flex: "1 1 auto" }}>
+                    <div
+                      style={{
+                        color: "rgba(255,255,255,0.92)",
+                        fontWeight: 900,
+                        fontSize: 18,
+                        letterSpacing: "-0.02em",
+                        marginBottom: 6,
+                      }}
+                    >
+                      Compare limit reached
+                    </div>
+                    <div
+                      style={{
+                        color: "rgba(255,255,255,0.72)",
+                        fontWeight: 600,
+                        fontSize: 15,
+                        lineHeight: 1.35,
+                      }}
+                    >
+                      {compareLimitToast.message}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setCompareLimitToast(null)}
+                    aria-label="Dismiss"
+                    style={{
+                      width: 34,
+                      height: 34,
+                      borderRadius: 12,
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      background: "rgba(255,255,255,0.04)",
+                      color: "rgba(255,255,255,0.80)",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: "pointer",
+                      flex: "0 0 auto",
+                    }}
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )
+      )}
     </div>
   );
 }
