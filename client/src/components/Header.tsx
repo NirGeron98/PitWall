@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { LogOut, Calendar, User } from 'lucide-react';
+import { LogOut, Calendar, User, Menu, X } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -19,6 +19,7 @@ interface Props {
 export const Header: React.FC<Props> = ({ year, onYearChange, userEmail, navItems }) => {
   const { logout } = useAuth();
   const [scrolled, setScrolled] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const location = useLocation();
 
   useEffect(() => {
@@ -38,24 +39,26 @@ export const Header: React.FC<Props> = ({ year, onYearChange, userEmail, navItem
         width: '100%',
       }}
     >
-      <div className="container" style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1fr', alignItems: 'center', gap: '16px' }}>
+      <div className="container header-grid" style={{ position: 'relative' }}>
         {/* Brand */}
         <div className="flex-row items-center" style={{ gap: '12px' }}>
           <div className="brand" style={{ fontSize: '1.5rem', lineHeight: 1 }}>
             PIT<span style={{ color: 'var(--accent-red)' }}>WALL</span>
           </div>
-          <div className="pill ghost" style={{ fontSize: '0.75rem', letterSpacing: '0.05em' }}>
-            BETA v2.0
-          </div>
         </div>
 
         {/* Navigation */}
-        <nav className="nav-links" style={{ justifyContent: 'center', gap: '10px' }}>
+        <nav className="nav-links header-nav">
           {navItems.map(item => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
             return (
-              <Link key={item.path} to={item.path} className={`nav-link ${isActive ? 'active' : ''}`}>
+              <Link
+                key={item.path}
+                to={item.path}
+                className={`nav-link ${isActive ? 'active' : ''}`}
+                onClick={() => setMobileNavOpen(false)}
+              >
                 <Icon size={16} />
                 {item.label}
               </Link>
@@ -64,7 +67,15 @@ export const Header: React.FC<Props> = ({ year, onYearChange, userEmail, navItem
         </nav>
 
         {/* Right Actions */}
-        <div className="flex-row items-center" style={{ gap: '16px', justifyContent: 'flex-end' }}>
+        <div className="flex-row items-center header-actions">
+          {/* Mobile Menu Toggle in first row */}
+          <button
+            className="btn-reset mobile-menu-btn"
+            onClick={() => setMobileNavOpen(!mobileNavOpen)}
+            aria-label="Toggle navigation"
+          >
+            {mobileNavOpen ? <X size={22} /> : <Menu size={22} />}
+          </button>
 
           {/* Season Selector */}
           <div className="flex-row items-center" style={{ gap: '8px' }}>
@@ -100,24 +111,127 @@ export const Header: React.FC<Props> = ({ year, onYearChange, userEmail, navItem
             <button
               onClick={logout}
               className="btn-reset flex-row items-center"
-              style={{ color: 'var(--accent-red)', padding: '8px' }}
+              style={{ color: 'var(--accent-red)', padding: '8px', gap: '6px', fontWeight: 600 }}
               title="Sign Out"
             >
               <LogOut size={20} className="hover-red" />
+              <span className="hidden-mobile">Sign out</span>
             </button>
           ) : (
             <div className="flex-row items-center" style={{ gap: '8px', opacity: 0.5 }}>
               <User size={20} />
             </div>
           )}
+
         </div>
+
+        {/* Mobile Menu Panel */}
+        {mobileNavOpen && (
+          <div className="mobile-nav-panel">
+            {navItems.map(item => {
+              const Icon = item.icon;
+              const isActive = location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={`nav-link mobile-nav-link ${isActive ? 'active' : ''}`}
+                  onClick={() => setMobileNavOpen(false)}
+                >
+                  <Icon size={18} />
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </div>
       <style>{`
-        @media (max-width: 960px) {
-          .nav-links { display: none; }
+        .header-grid {
+          display: grid;
+          grid-template-columns: 1fr 2fr 1fr;
+          align-items: center;
+          gap: 16px;
         }
+
+        .header-nav {
+          justify-content: center;
+          gap: 10px;
+        }
+
+        .header-actions {
+          gap: 16px;
+          justify-content: flex-end;
+        }
+
+        @media (max-width: 960px) {
+          .app-header {
+            height: auto;
+            padding-top: var(--space-3);
+            padding-bottom: var(--space-3);
+          }
+
+          .header-grid {
+            grid-template-columns: 1fr;
+            row-gap: 12px;
+            position: relative;
+          }
+
+          .header-nav {
+            display: none;
+          }
+
+          .header-actions {
+            justify-content: flex-end;
+            flex-wrap: wrap;
+            gap: 10px;
+            position: relative;
+          }
+
+          .mobile-menu-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: var(--bg-subtle);
+            color: var(--text-primary);
+            margin-left: 8px;
+          }
+
+          .mobile-nav-panel {
+            position: absolute;
+            top: calc(100% + 6px);
+            right: 0;
+            left: auto;
+            background: rgba(24, 24, 27, 0.98);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            box-shadow: 0 18px 40px -16px rgba(0,0,0,0.6);
+            z-index: 5;
+            min-width: 180px;
+          }
+
+          .mobile-nav-link {
+            width: 100%;
+            justify-content: flex-start;
+            border-radius: 10px;
+            padding: 10px 12px;
+          }
+        }
+
         @media (max-width: 640px) {
           .hidden-mobile { display: none !important; }
+        }
+
+        @media (min-width: 961px) {
+          .mobile-menu-btn { display: none; }
+          .mobile-nav-panel { display: none; }
         }
         .hover-red:hover { color: var(--accent-red); }
       `}</style>

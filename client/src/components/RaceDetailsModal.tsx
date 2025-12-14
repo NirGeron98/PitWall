@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Trophy, Flag, RefreshCw, Clock } from 'lucide-react';
+import { X, Flag, Clock } from 'lucide-react';
 import type { RaceEvent, RaceResult } from '../types/f1';
 import { useData } from '../contexts/DataContext';
 
@@ -20,10 +20,7 @@ export const RaceDetailsModal: React.FC<Props> = ({ isOpen, onClose, race, onDri
     const [activeSession, setActiveSession] = useState<SessionCode>('R');
     const prevRaceRound = useRef<number | null>(null);
 
-    // Live Polling State
-    const [autoRefresh, setAutoRefresh] = useState(false);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-    const pollingInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
     // Helper to format time strings (truncate to 3-4 decimal places)
     const formatTime = (timeStr: string) => {
@@ -123,7 +120,6 @@ export const RaceDetailsModal: React.FC<Props> = ({ isOpen, onClose, race, onDri
             // Note: We don't verify if race.RoundNumber changed here easily without a ref or prev props, 
             // but assuming isOpen handles visibility, we can rely on `race` prop behavior.
             setActiveSession('R');
-            setAutoRefresh(false);
 
             // 1. Load Active Session (Race) Immediately
             (async () => {
@@ -139,180 +135,213 @@ export const RaceDetailsModal: React.FC<Props> = ({ isOpen, onClose, race, onDri
                 }
             })();
         }
-        return () => stopPolling();
+        return;
     }, [isOpen, race]);
-
-    // Handle auto-refresh toggling
-    useEffect(() => {
-        if (autoRefresh) {
-            pollingInterval.current = setInterval(() => {
-                console.log("Live Update: Refreshing results...");
-                // Pass true to force DB update from FastF1
-                fetchData(activeSession, true);
-            }, 15000);
-        } else {
-            stopPolling();
-        }
-        return () => stopPolling();
-    }, [autoRefresh, activeSession]);
-
-    const stopPolling = () => {
-        if (pollingInterval.current) {
-            clearInterval(pollingInterval.current);
-            pollingInterval.current = null;
-        }
-    };
 
     if (!isOpen || !race) return null;
 
     return (
-        <div className="modal-overlay">
-            <div className="modal-content" style={{ maxWidth: '900px' }}>
+        <>
+            <style>{`
+                /* Hide scrollbar on mobile while keeping functionality */
+                @media (max-width: 768px) {
+                    .modal-body::-webkit-scrollbar {
+                        display: none;
+                    }
+                    .modal-body {
+                        -ms-overflow-style: none;
+                        scrollbar-width: none;
+                    }
+                }
+            `}</style>
+            <div className="modal-overlay">
+                <div className="modal-content" style={{ maxWidth: '900px' }}>
 
-                {/* Header */}
-                <div className="modal-header flex-row justify-between items-center" style={{ padding: '24px', borderBottom: '1px solid var(--glass-border)' }}>
-                    <div className="flex-col" style={{ gap: '5px' }}>
-                        <div className="flex-row items-center" style={{ gap: '10px' }}>
-                            <span style={{ color: 'var(--accent-red)', fontWeight: 'bold', fontSize: '0.9rem', letterSpacing: '0.1em' }}>
-                                ROUND {race.RoundNumber}
-                            </span>
-                            {autoRefresh && (
-                                <span className="pill" style={{
-                                    backgroundColor: 'var(--accent-red)', color: 'white',
-                                    fontSize: '0.7rem',
-                                    animation: 'pulse 2s infinite'
-                                }}>LIVE</span>
-                            )}
-                        </div>
-                        <h2 style={{ margin: 0, fontSize: '2rem' }}>{race.EventName}</h2>
-                        <span className="text-muted">{race.Location}, {race.Country}</span>
-                    </div>
-
-                    <div className="flex-row items-center" style={{ gap: '15px' }}>
-                        <button
-                            onClick={() => setAutoRefresh(!autoRefresh)}
-                            className={`btn-tab ${autoRefresh ? 'active' : ''}`}
-                            style={{ fontSize: '0.85rem' }}
+                    {/* Header */}
+                    <div className="modal-header" style={{ 
+                        padding: '20px', 
+                        borderBottom: '1px solid var(--glass-border)',
+                        position: 'relative'
+                    }}>
+                        {/* Close button - absolute positioned in corner */}
+                        <button 
+                            onClick={onClose} 
+                            className="btn-reset" 
+                            style={{
+                                position: 'absolute',
+                                top: '12px',
+                                right: '12px',
+                                padding: '8px',
+                                color: 'var(--text-secondary)',
+                                transition: 'color 0.2s',
+                                zIndex: 10
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.color = 'white'}
+                            onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
                         >
-                            <RefreshCw size={16} className={autoRefresh ? "animate-spin-slow" : ""} style={{ marginRight: 8 }} />
-                            <span>{autoRefresh ? 'Auto-Refresh ON' : 'Enable Live Updates'}</span>
+                            <X size={24} />
                         </button>
-                        <button onClick={onClose} className="btn-reset p-2 text-muted hover:text-white"><X size={24} /></button>
+
+                        <div className="flex-col" style={{ gap: '8px', paddingRight: '40px' }}>
+                            <div className="flex-row items-center" style={{ gap: '10px', flexWrap: 'wrap' }}>
+                                <span style={{ 
+                                    color: 'var(--accent-red)', 
+                                    fontWeight: 'bold', 
+                                    fontSize: '0.85rem', 
+                                    letterSpacing: '0.1em' 
+                                }}>
+                                    ROUND {race.RoundNumber}
+                                </span>
+                            </div>
+                            <h2 style={{ margin: 0, fontSize: 'clamp(1.5rem, 5vw, 2rem)', lineHeight: 1.2 }}>
+                                {race.EventName}
+                            </h2>
+                            <span className="text-muted" style={{ fontSize: '0.9rem' }}>
+                                {race.Location}, {race.Country}
+                            </span>
+                        </div>
                     </div>
-                </div>
 
-                <div style={{ padding: '0 1.5rem', marginTop: '10px', fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    <Clock size={12} />
-                    <span>Last updated: {lastUpdated ? lastUpdated.toLocaleTimeString('en-GB') : 'Never'}</span>
-                </div>
+                    <div style={{ 
+                        padding: '12px 20px', 
+                        fontSize: '0.75rem', 
+                        color: 'var(--text-secondary)', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '6px',
+                        borderBottom: '1px solid rgba(255,255,255,0.05)'
+                    }}>
+                        <Clock size={12} />
+                        <span>Last updated: {lastUpdated ? lastUpdated.toLocaleTimeString('en-GB') : 'Never'}</span>
+                    </div>
 
-                {/* Body */}
-                <div className="modal-body" style={{ maxHeight: '65vh', overflowY: 'auto', padding: '24px' }}>
-                    {/* Session Tabs */}
-                    <div className="flex-row" style={{ gap: '10px', marginBottom: '24px', flexWrap: 'wrap' }}>
-                        {['P1', 'P2', 'P3', 'Q', 'R'].map(code => (
-                            <button
+                    {/* Body */}
+                    <div className="modal-body" style={{ 
+                        maxHeight: '65vh', 
+                        overflowY: 'auto', 
+                        padding: '20px',
+                        /* Hide scrollbar on mobile for cleaner look */
+                        scrollbarWidth: 'thin',
+                        scrollbarColor: 'rgba(255,255,255,0.2) transparent'
+                    }}>
+                        {/* Session Tabs */}
+                        <div className="flex-row" style={{ gap: '10px', marginBottom: '24px', flexWrap: 'wrap' }}>
+                            {['P1', 'P2', 'P3', 'Q', 'R'].map(code => (
+                                <button
                                 key={code}
                                 className={`btn-tab ${activeSession === code ? 'active' : ''}`}
                                 onClick={() => {
                                     setActiveSession(code as SessionCode);
-                                    // Only force refresh if auto-refresh is enabled (otherwise use cache)
-                                    fetchData(code as SessionCode, autoRefresh);
+                                    fetchData(code as SessionCode, false);
                                 }}
                             >
                                 {code === 'R' ? 'Race' : code === 'Q' ? 'Qualifying' : code}
                             </button>
                         ))}
-                    </div>
-
-                    {loading && results.length === 0 ? (
-                        <div className="loader-box" style={{ height: '300px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px' }}>
-                            <Flag className="animate-pulse" size={48} color="var(--accent-red)" />
-                            <p className="text-secondary">Loading Official Results...</p>
                         </div>
-                    ) : (
-                        <table className="table-compact" style={{ width: '100%' }}>
-                            <thead>
-                                <tr>
-                                    <th>POS</th>
-                                    <th>DRIVER</th>
-                                    <th>TEAM</th>
-                                    <th>TIME / GAP</th>
-                                    <th style={{ textAlign: 'right' }}>PTS</th>
-                                </tr>
-                            </thead>
-                            <tbody>
+
+                        {loading && results.length === 0 ? (
+                            <div className="loader-box" style={{ height: '300px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px' }}>
+                                <Flag className="animate-pulse" size={48} color="var(--accent-red)" />
+                                <p className="text-secondary">Loading Official Results...</p>
+                            </div>
+                        ) : (
+                            <div className="race-results-stack">
                                 {results.map((res) => {
-                                    const driverMeta = drivers.find(d => d.DriverNumber === res.DriverNumber);
-                                    const teamColor = driverMeta?.TeamColor || 'var(--border)';
+                        const driverMeta = drivers.find(d => d.DriverNumber === res.DriverNumber);
+                        const teamColor = driverMeta?.TeamColor || 'var(--border)';
 
-                                    const posColor = res.Position === 1 ? '#FFD700' :
-                                        res.Position === 2 ? '#C0C0C0' :
-                                            res.Position === 3 ? '#CD7F32' : 'white';
+                        const posClass =
+                            res.Position === 1
+                                            ? 'medal-gold'
+                                            : res.Position === 2
+                                            ? 'medal-silver'
+                                            : res.Position === 3
+                                            ? 'medal-bronze'
+                                            : 'medal-default';
 
-                                    return (
-                                        <tr
-                                            key={`${race.RoundNumber}-${res.DriverNumber}-${res.SessionType || ''}`}
-                                            className="table-row-hover clickable-row"
-                                            onClick={() => onDriverClick(res.DriverNumber)}
-                                        >
-                                            <td style={{ fontWeight: 'bold', color: posColor, fontSize: '1.1rem' }}>
-                                                {res.Position}
-                                            </td>
-                                            <td>
-                                                <div className="flex-row items-center" style={{ gap: '12px' }}>
-                                                    {/* Driver Face */}
-                                                    <div style={{ position: 'relative', width: '36px', height: '36px' }}>
-                                                        {driverMeta?.HeadshotUrl ? (
-                                                            <img
-                                                                src={driverMeta.HeadshotUrl}
-                                                                alt={res.BroadcastName}
-                                                                style={{
-                                                                    width: '100%',
-                                                                    height: '100%',
-                                                                    borderRadius: '50%',
-                                                                    objectFit: 'cover',
-                                                                    border: `1px solid ${teamColor}`
-                                                                }}
-                                                            />
-                                                        ) : (
-                                                            <div style={{
-                                                                width: '100%',
-                                                                height: '100%',
-                                                                borderRadius: '50%',
-                                                                background: '#333',
-                                                                border: `1px solid ${teamColor}`
-                                                            }} />
-                                                        )}
-                                                        {res.Position === 1 && <div style={{ position: 'absolute', bottom: -2, right: -2 }}><Trophy size={12} color="#FFD700" fill="#FFD700" /></div>}
+                                    const statusLabel =
+                                        res.Status === 'Finished'
+                                            ? 'Finished'
+                                            : res.Status || (res.Time ? formatTime(res.Time) : '—');
+
+                        const statusTone =
+                            res.Status && res.Status.toLowerCase().includes('dnf')
+                                ? 'status-bad'
+                                : res.Status === 'Finished'
+                                ? 'status-good'
+                                : 'status-neutral';
+
+                        const positionNumber = (() => {
+                            // 1. Convert to string safely
+                            const posStr = String(res.Position || '');                        
+                            // 2. Check if the result is empty or just a number
+                            if (posStr === '' || !isNaN(Number(posStr))) {
+                                return posStr || '—';
+                            }
+                            // 3. For strings like 'R' or 'NC' (non-numeric, non-empty), return the original value
+                            if (/[^\d]/.test(posStr)) {
+                                // If it contains non-digits, try to extract the number first
+                                const numericPart = posStr.replace(/[^\d]/g, '');
+                                return numericPart || posStr; // Return number if found, otherwise the full string
+                            }
+
+                            return posStr || '—';
+                        })();
+                        const positionLabel = (activeSession === 'Q' || activeSession === 'R')
+                          ? `P${positionNumber}`
+                          : `${positionNumber}`;
+
+                        return (
+                            <button
+                                key={`${race.RoundNumber}-${res.DriverNumber}-${res.SessionType || ''}`}
+                                className="race-result-card"
+                                onClick={() => {
+                                    onClose();
+                                    onDriverClick(res.DriverNumber);
+                                }}
+                                style={{ borderLeftColor: teamColor }}
+                            >
+                                <div className="race-card-left">
+                                    <div className={`race-pos ${posClass}`}>{positionLabel}</div>
+                                    {driverMeta?.HeadshotUrl ? (
+                                        <img
+                                            src={driverMeta.HeadshotUrl}
+                                            alt={res.BroadcastName}
+                                            className="race-driver-avatar"
+                                            style={{ borderColor: teamColor }}
+                                        />
+                                    ) : (
+                                        <div
+                                            className="race-driver-avatar"
+                                            style={{ borderColor: teamColor, background: '#333' }}
+                                        />
+                                    )}
+                                    <div className="race-driver-meta">
+                                        <div className="race-driver-name">
+                                            {res.BroadcastName}
+                                                        <span className="race-driver-number">#{res.DriverNumber}</span>
                                                     </div>
-
-                                                    <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>
-                                                        {res.BroadcastName}
-                                                        <span style={{ color: 'var(--text-secondary)', fontWeight: 400, marginLeft: '6px' }}>#{res.DriverNumber}</span>
-                                                    </span>
+                                                    <div className="race-team-name">{res.TeamName}</div>
                                                 </div>
-                                            </td>
-                                            <td>
-                                                <div className="flex-row items-center" style={{ gap: '8px' }}>
-                                                    <div style={{ width: '3px', height: '14px', background: teamColor, borderRadius: '2px' }} />
-                                                    <span className="text-secondary">{res.TeamName}</span>
+                                            </div>
+                                            <div className="race-card-right">
+                                                <div className={`race-status ${statusTone}`}>{statusLabel}</div>
+                                                <div className="race-time">
+                                                    {res.Status === 'Finished' ? formatTime(res.Time) : res.Time || '--'}
                                                 </div>
-                                            </td>
-                                            <td style={{ fontFamily: 'monospace', color: 'var(--text-primary)' }}>
-                                                {res.Status === 'Finished' ? formatTime(res.Time) : res.Status || res.Time}
-                                            </td>
-                                            <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
-                                                {res.Points > 0 ? `+${res.Points}` : ''}
-                                            </td>
-                                        </tr>
+                                                <div className="race-points">
+                                                    {res.Points > 0 ? `+${res.Points} pts` : '0 pts'}
+                                                </div>
+                                            </div>
+                                        </button>
                                     );
                                 })}
-                            </tbody>
-                        </table>
-                    )}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
-        </div>
+        </>
     );
 };

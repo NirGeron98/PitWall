@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import {
   BrowserRouter,
   Routes,
@@ -320,36 +320,22 @@ function AppShell() {
         navItems={navItems}
       />
 
-      <main className={`container app-main ${activeView === "analysis" ? "app-main--wide" : ""}`}>
-          <div style={{ textAlign: "center" }}>
-            <div className="page-header-enhanced">
-              <div className="header-bg">
-                <div className="grid-overlay"></div>
-                <div className="glow-orb glow-left"></div>
-                <div className="glow-orb glow-right"></div>
-                <div className="speed-lines">
-                  <div className="speed-line"></div>
-                  <div className="speed-line"></div>
-                  <div className="speed-line"></div>
-                </div>
-              </div>
-              <div className="header-content">
-                <h1 className="page-title-enhanced">
-                  {activeView === "races" && "Race Calendar"}
-                  {activeView === "drivers" && "Driver Roster"}
-                  {activeView === "profile" && `Driver Profile — ${selectedDriver?.BroadcastName || "Loading"}`}
-                  {activeView === "standings" && "Standings"}
-                  {activeView === "favorites" && "Favorites"}
-                  {activeView === "compare" && "Compare"}
-                  {activeView === "analysis" && "Analysis"}
-                </h1>
-                <div className="title-accent">
-                  <div className="accent-line"></div>
-                  <div className="accent-dot"></div>
-                  <div className="accent-line"></div>
-                </div>
-              </div>
-            </div>
+      <main className={`container app-main ${activeView === "analysis" ? "app-main--wide" : ""} ${activeView === "profile" ? "app-main--profile" : ""}`}>
+                  <div className="page-header-compact">
+          <h1 className="page-title-compact">
+            {activeView === "races" && "Race Calendar"}
+            {activeView === "drivers" && "Driver Roster"}
+            {activeView === "profile" && `Driver Profile - ${selectedDriver?.BroadcastName || "Loading"}`}
+            {activeView === "standings" && "Standings"}
+            {activeView === "favorites" && "Favorites"}
+            {activeView === "compare" && "Compare"}
+            {activeView === "analysis" && "Analysis"}
+          </h1>
+          <div className="title-accent">
+            <div className="accent-line"></div>
+            <div className="accent-dot"></div>
+            <div className="accent-line"></div>
+          </div>
         </div>
 
         <div className="animate-enter">
@@ -498,3 +484,4 @@ export default function App() {
     </BrowserRouter>
   );
 }
+

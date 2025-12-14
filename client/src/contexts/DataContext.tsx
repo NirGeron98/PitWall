@@ -129,10 +129,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, initialYea
       }
       setError(null);
       try {
-        console.log(`[DataContext] Loading season ${year}...`);
         await ensureSeason(year, true);
       } catch (err) {
-        console.error('[DataContext] Failed to load data:', err);
         setError(err instanceof Error ? err.message : 'Failed to load data');
       } finally {
         setLoading(false);
@@ -171,12 +169,10 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, initialYea
 
     // Return from cache if available and not forcing refresh
     if (!forceRefresh && driverStatsCache[cacheKey]) {
-      console.log(`[DataContext] Returning cached stats for driver ${driverNumber}`);
       return driverStatsCache[cacheKey];
     }
 
     try {
-      console.log(`[DataContext] Fetching fresh stats for driver ${driverNumber}...`);
       const stats = await getDriverStats(year, driverNumber);
 
       // Update cache
@@ -187,7 +183,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, initialYea
 
       return stats;
     } catch (err) {
-      console.error(`[DataContext] Failed to fetch driver stats for ${driverNumber}:`, err);
       return null;
     }
   };
@@ -202,19 +197,16 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, initialYea
 
     // Return from cache if available and not forcing refresh
     if (!forceRefresh && sessionCache[cacheKey]) {
-      console.log(`[DataContext] Returning cached results for round ${round} session ${session}`);
       return sessionCache[cacheKey];
     }
 
     // Check for in-flight request
     const inFlightPromise = sessionPromiseCache.current[cacheKey] as Promise<RaceResult[]> | undefined;
     if (!forceRefresh && inFlightPromise) {
-      console.log(`[DataContext] Joining in-flight request for round ${round} session ${session}`);
       return inFlightPromise;
     }
 
     try {
-      console.log(`[DataContext] Fetching fresh results for round ${round} session ${session}...`);
 
       const promise = getSessionResults(year, round, session, forceRefresh)
         .then(results => {
@@ -232,7 +224,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, initialYea
       sessionPromiseCache.current[cacheKey] = promise;
       return promise;
     } catch (err) {
-      console.error(`[DataContext] Failed to fetch session results for round ${round} ${session}:`, err);
       return [];
     }
   };
