@@ -95,9 +95,6 @@ function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const authMode: "login" | "register" = location.pathname.startsWith("/signup")
-    ? "register"
-    : "login";
   const [authStatus, setAuthStatus] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
 
