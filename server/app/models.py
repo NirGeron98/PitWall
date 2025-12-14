@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from sqlalchemy import Column, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.types import JSON
 
 from app.database import Base
 
@@ -23,7 +25,7 @@ class DriverModel(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     year = Column(Integer, index=True)
-    driver_number = Column(String)
+    driver_number = Column(String, index=True)
     broadcast_name = Column(String)
     full_name = Column(String)
     team_name = Column(String)
@@ -40,7 +42,7 @@ class DriverStandingModel(Base):
     points = Column(String)
     wins = Column(Integer)
     driver_id = Column(String)
-    driver_number = Column(String)
+    driver_number = Column(String, index=True)
     given_name = Column(String)
     family_name = Column(String)
     constructor_name = Column(String)
@@ -58,7 +60,7 @@ class TeamStandingModel(Base):
     position = Column(Integer)
     points = Column(String)
     wins = Column(Integer)
-    constructor_id = Column(String)
+    constructor_id = Column(String, index=True)
     constructor_name = Column(String)
     nationality = Column(String, nullable=True)
 
@@ -71,7 +73,7 @@ class SessionResultModel(Base):
     round = Column(Integer, index=True)
     session_code = Column(String, index=True)
     position = Column(String, nullable=True)  # practice sessions can be missing positions
-    driver_number = Column(String)
+    driver_number = Column(String, index=True)
     broadcast_name = Column(String)
     team_name = Column(String)
     time = Column(String)
@@ -99,3 +101,21 @@ class FavoriteModel(Base):
     __table_args__ = (
         UniqueConstraint("user_id", "driver_id", "team_id", name="uq_user_favorite"),
     )
+
+
+class AppCacheModel(Base):
+    """
+    Generic cache table for precomputed heavy payloads (analysis, telemetry, standings, etc.).
+    Example keys:
+      - analysis_laps_2024_1
+      - telemetry_2024_1_44
+      - stints_2024_1_44
+    """
+
+    __tablename__ = "app_cache"
+
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String, unique=True, index=True, nullable=False)
+    # Use JSONB on Postgres, JSON otherwise (SQLite dev fallback).
+    data = Column(JSONB().with_variant(JSON, "sqlite"), nullable=False)
+    last_updated = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
