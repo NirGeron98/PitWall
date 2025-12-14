@@ -63,10 +63,6 @@ export const AnalysisPage: React.FC<Props> = () => {
   const UI_LAP_EVOLUTION_X = "Lap Number";
   const UI_LAP_EVOLUTION_Y = "Lap Time";
 
-  const UI_EMPTY_COMPARISON_TITLE = "Select Drivers to Compare";
-  const UI_EMPTY_COMPARISON_P =
-    "Click on one or more drivers above to see lap-by-lap comparison.";
-
   const UI_MOBILE_NOTICE_TITLE = "Charts & diagrams need more space";
   const UI_MOBILE_NOTICE_P =
     "You can view key numbers on mobile. For full analysis (graphs/diagrams), open this page on a larger screen.";
@@ -393,40 +389,31 @@ export const AnalysisPage: React.FC<Props> = () => {
       (a, b) => (a?.value ?? 0) - (b?.value ?? 0)
     );
     return (
-      <div
-        style={{
-          background: "rgba(0,0,0,0.95)",
-          border: "1px solid rgba(255,255,255,0.2)",
-          borderRadius: 8,
-          padding: 12,
-        }}
-      >
-        <div style={{ color: "#9ca3af", fontSize: 12, marginBottom: 6 }}>
-          Lap {label}
-        </div>
+      <div className="analysis-tooltip">
+        <div className="analysis-tooltip__label">Lap {label}</div>
         {sorted.map((entry: any) => (
           <div
             key={entry.dataKey}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              color: "#fff",
-              fontSize: 12,
-            }}
+            className="analysis-tooltip__row"
           >
-            <span
-              style={{
-                width: 10,
-                height: 2,
-                background: entry.color,
-                borderTop: entry?.strokeDasharray
-                  ? "2px dashed " + entry.color
-                  : undefined,
-              }}
-            />
-            <span style={{ flex: 1 }}>{entry.name}</span>
-            <span style={{ color: "#9ca3af" }}>P{entry.value}</span>
+            <svg
+              className="analysis-tooltip__swatch"
+              viewBox="0 0 18 6"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <line
+                x1="0"
+                y1="3"
+                x2="18"
+                y2="3"
+                stroke={entry.color}
+                strokeWidth="2"
+                strokeDasharray={entry?.strokeDasharray ? "5 4" : undefined}
+              />
+            </svg>
+            <span className="analysis-tooltip__name">{entry.name}</span>
+            <span className="analysis-tooltip__value">P{entry.value}</span>
           </div>
         ))}
       </div>
@@ -568,45 +555,109 @@ export const AnalysisPage: React.FC<Props> = () => {
   // Custom legend to display dashed/solid indicators
   const renderPositionLegend = useCallback(() => {
     return (
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 6,
-          paddingLeft: 30,
-          fontSize: 12,
-          maxHeight: 550,
-          overflowY: "auto",
-        }}
-      >
+      <div className="analysis-position-legend">
         {positionLegendPayload.map((item) => (
-          <div
-            key={item.id}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              color: "#fff",
-            }}
-          >
-            <span
-              style={{
-                width: 18,
-                height: 2,
-                background: item.strokeDasharray ? undefined : item.color,
-                borderTop: item.strokeDasharray
-                  ? `2px dashed ${item.color}`
-                  : undefined,
-              }}
-            />
-            <span style={{ color: item.color, fontWeight: 600 }}>
-              {item.value}
-            </span>
+          <div key={item.id} className="analysis-position-legend__row">
+            <svg
+              className="analysis-position-legend__swatch"
+              viewBox="0 0 22 6"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <line
+                x1="0"
+                y1="3"
+                x2="22"
+                y2="3"
+                stroke={item.color}
+                strokeWidth="2"
+                strokeDasharray={item.strokeDasharray ? "6 4" : undefined}
+              />
+            </svg>
+            <span className="analysis-position-legend__name">{item.value}</span>
           </div>
         ))}
       </div>
     );
   }, [positionLegendPayload]);
+
+  const renderLapEvolutionTooltip = useCallback(
+    (props: any) => {
+      const { active, payload, label } = props;
+      if (!active || !payload || !payload.length) return null;
+
+      return (
+        <div className="analysis-tooltip">
+          <div className="analysis-tooltip__label">{UI_LAP_EVOLUTION_X}: {label}</div>
+          {payload.map((entry: any) => {
+            const driver = allDrivers.find((d) => d.driverNumber === entry.dataKey);
+            return (
+              <div key={entry.dataKey} className="analysis-tooltip__row">
+                <svg
+                  className="analysis-tooltip__swatch"
+                  viewBox="0 0 18 6"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <line
+                    x1="0"
+                    y1="3"
+                    x2="18"
+                    y2="3"
+                    stroke={entry.color}
+                    strokeWidth="2"
+                  />
+                </svg>
+                <span className="analysis-tooltip__name">{driver?.driver || entry.name || entry.dataKey}</span>
+                <span className="analysis-tooltip__value">{formatLapTimeShort(entry.value)}</span>
+              </div>
+            );
+          })}
+        </div>
+      );
+    },
+    [allDrivers, UI_LAP_EVOLUTION_X]
+  );
+
+  const renderBestLapDeltaTooltip = useCallback((props: any) => {
+    const { active, payload, label } = props;
+    if (!active || !payload || !payload.length) return null;
+    const deltaEntry = payload.find((p: any) => p.dataKey === "delta");
+    const bestEntry = payload.find((p: any) => p.dataKey === "best");
+
+    return (
+      <div className="analysis-tooltip">
+        <div className="analysis-tooltip__label">{label}</div>
+        {bestEntry && (
+          <div className="analysis-tooltip__row">
+            <span className="analysis-tooltip__name">Best Lap</span>
+            <span className="analysis-tooltip__value">{formatLapTimeShort(Number(bestEntry.value))}</span>
+          </div>
+        )}
+        {deltaEntry && (
+          <div className="analysis-tooltip__row">
+            <span className="analysis-tooltip__name">Delta</span>
+            <span className="analysis-tooltip__value">+{formatLapTimeShort(Number(deltaEntry.value))}</span>
+          </div>
+        )}
+      </div>
+    );
+  }, []);
+
+  const renderConsistencyTooltip = useCallback((props: any) => {
+    const { active, payload, label } = props;
+    if (!active || !payload || !payload.length) return null;
+    const value = payload[0]?.value;
+    return (
+      <div className="analysis-tooltip">
+        <div className="analysis-tooltip__label">{label}</div>
+        <div className="analysis-tooltip__row">
+          <span className="analysis-tooltip__name">Std Dev</span>
+          <span className="analysis-tooltip__value">{formatLapTimeShort(Number(value))}</span>
+        </div>
+      </div>
+    );
+  }, []);
 
   const toggleDriver = (driverNum: string) => {
     setSelectedDrivers((prev) => {
@@ -621,61 +672,21 @@ export const AnalysisPage: React.FC<Props> = () => {
   if (loading) return <Loading message={UI_LOADING} />;
 
   return (
-    <div className="analysis-page" style={{ direction: "ltr" }}>
+    <div className="analysis-page analysis-page--ltr">
       {/* Desktop-only hero header */}
       <div
         className="analysis-desktop-only analysis-hero-grid"
-        style={{
-          marginBottom: "24px",
-          display: "grid",
-          gridTemplateColumns: "minmax(260px, 340px) 1fr minmax(120px, 260px)",
-          gap: "16px",
-          alignItems: "center",
-          justifyItems: "center",
-        }}
       >
-        <div
-          style={{
-            flex: "0 0 380px",
-            background: "rgba(255,255,255,0.02)",
-            border: "1px solid rgba(255,255,255,0.08)",
-            borderRadius: "12px",
-            padding: "14px 16px",
-            maxWidth: "420px",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              marginBottom: "8px",
-              color: "#e5e7eb",
-              fontWeight: 700,
-              letterSpacing: "-0.02em",
-            }}
-          >
+        <div className="analysis-top3-card">
+          <div className="analysis-top3-card__header">
             <TrendingUp size={16} />
             <span>Top 3 Finishing Order</span>
           </div>
-          <table
-            style={{
-              width: "100%",
-              borderCollapse: "collapse",
-              color: "#e5e7eb",
-              fontSize: "14px",
-            }}
-          >
+          <table className="analysis-top3-table">
             <thead>
-              <tr
-                style={{
-                  color: "#9ca3af",
-                  textTransform: "uppercase",
-                  fontSize: "11px",
-                }}
-              >
-                <th style={{ textAlign: "left", padding: "6px" }}>Position</th>
-                <th style={{ textAlign: "left", padding: "6px" }}>Driver</th>
+              <tr className="analysis-top3-table__headRow">
+                <th className="analysis-top3-table__th">Position</th>
+                <th className="analysis-top3-table__th">Driver</th>
               </tr>
             </thead>
             <tbody>
@@ -687,14 +698,9 @@ export const AnalysisPage: React.FC<Props> = () => {
                       entry.driver
                     : "--";
                 return (
-                  <tr
-                    key={pos}
-                    style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}
-                  >
-                    <td
-                      style={{ padding: "8px 6px", fontWeight: 700 }}
-                    >{`P${pos}`}</td>
-                    <td style={{ padding: "8px 6px" }}>{name}</td>
+                  <tr key={pos} className="analysis-top3-table__row">
+                    <td className="analysis-top3-table__pos">{`P${pos}`}</td>
+                    <td className="analysis-top3-table__td">{name}</td>
                   </tr>
                 );
               })}
@@ -702,64 +708,32 @@ export const AnalysisPage: React.FC<Props> = () => {
           </table>
         </div>
 
-        <div style={{ width: "100%", maxWidth: "720px", textAlign: "center" }}>
-          <h1
-            style={{
-              fontSize: "42px",
-              fontWeight: "800",
-              color: "#fff",
-              marginBottom: "8px",
-              textTransform: "uppercase",
-              letterSpacing: "1px",
-            }}
-          >
+        <div className="analysis-hero-center">
+          <h1 className="analysis-hero-title">
             {UI_HEADER}
           </h1>
-          <p style={{ fontSize: "17px", color: "#d1d5db", margin: 0 }}>
-            {UI_SUBHEADER}
-          </p>
+          <p className="analysis-hero-subtitle">{UI_SUBHEADER}</p>
         </div>
 
         {/* Spacer to keep title centered relative to the table on the left */}
-        <div style={{ width: "100%", maxWidth: "260px" }} />
+        <div className="analysis-hero-spacer" />
       </div>
 
       {/* Race Selector */}
-      <div
-        className="analysis-race-selector"
-        style={{
-          marginBottom: "32px",
-          display: "flex",
-          justifyContent: "center",
-          gap: "12px",
-          alignItems: "center",
-        }}
-      >
-        <label
-          style={{ fontSize: "14px", color: "#9ca3af", fontWeight: "600" }}
-        >
+      <div className="analysis-race-selector">
+        <label className="analysis-race-label">
           {UI_SELECT_RACE}:
         </label>
         <select
           className="analysis-race-select"
           value={selectedRound || ""}
           onChange={(e) => setSelectedRound(parseInt(e.target.value))}
-          style={{
-            padding: "10px 16px",
-            fontSize: "14px",
-            borderRadius: "8px",
-            border: "1px solid rgba(255, 255, 255, 0.2)",
-            background: "rgba(255, 255, 255, 0.05)",
-            color: "#fff",
-            cursor: "pointer",
-            minWidth: "300px",
-          }}
         >
           {raceOptions.map((race) => (
             <option
               key={race.RoundNumber}
               value={race.RoundNumber}
-              style={{ background: "#1e293b" }}
+              className="analysis-race-option"
             >
               {UI_ROUND} {race.RoundNumber}: {race.EventName} ({race.Country})
             </option>
@@ -772,54 +746,17 @@ export const AnalysisPage: React.FC<Props> = () => {
       ) : (
         <>
           {/* Mobile-only: Top 3 finishing order (numbers-only, OK for small screens) */}
-          <div
-            className="analysis-mobile-top3"
-            style={{ marginBottom: "16px" }}
-          >
-            <div
-              style={{
-                background: "rgba(255,255,255,0.02)",
-                border: "1px solid rgba(255,255,255,0.08)",
-                borderRadius: "12px",
-                padding: "14px 16px",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  marginBottom: "8px",
-                  color: "#e5e7eb",
-                  fontWeight: 700,
-                  letterSpacing: "-0.02em",
-                }}
-              >
+          <div className="analysis-mobile-top3">
+            <div className="analysis-top3-card">
+              <div className="analysis-top3-card__header">
                 <TrendingUp size={16} />
                 <span>Top 3 Finishing Order</span>
               </div>
-              <table
-                style={{
-                  width: "100%",
-                  borderCollapse: "collapse",
-                  color: "#e5e7eb",
-                  fontSize: "14px",
-                }}
-              >
+              <table className="analysis-top3-table">
                 <thead>
-                  <tr
-                    style={{
-                      color: "#9ca3af",
-                      textTransform: "uppercase",
-                      fontSize: "11px",
-                    }}
-                  >
-                    <th style={{ textAlign: "left", padding: "6px" }}>
-                      Position
-                    </th>
-                    <th style={{ textAlign: "left", padding: "6px" }}>
-                      Driver
-                    </th>
+                  <tr className="analysis-top3-table__headRow">
+                    <th className="analysis-top3-table__th">Position</th>
+                    <th className="analysis-top3-table__th">Driver</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -831,16 +768,9 @@ export const AnalysisPage: React.FC<Props> = () => {
                           entry.driver
                         : "--";
                     return (
-                      <tr
-                        key={pos}
-                        style={{
-                          borderTop: "1px solid rgba(255,255,255,0.05)",
-                        }}
-                      >
-                        <td
-                          style={{ padding: "8px 6px", fontWeight: 700 }}
-                        >{`P${pos}`}</td>
-                        <td style={{ padding: "8px 6px" }}>{name}</td>
+                      <tr key={pos} className="analysis-top3-table__row">
+                        <td className="analysis-top3-table__pos">{`P${pos}`}</td>
+                        <td className="analysis-top3-table__td">{name}</td>
                       </tr>
                     );
                   })}
@@ -850,67 +780,22 @@ export const AnalysisPage: React.FC<Props> = () => {
           </div>
 
           {/* Mobile-only notice */}
-          <div
-            className="analysis-mobile-only"
-            style={{
-              marginBottom: "16px",
-              background: "rgba(255, 255, 255, 0.03)",
-              border: "1px solid rgba(255, 255, 255, 0.08)",
-              borderRadius: "16px",
-              padding: "16px",
-              display: "flex",
-              gap: "12px",
-              alignItems: "flex-start",
-            }}
-          >
-            <div
-              style={{
-                width: 34,
-                height: 34,
-                borderRadius: 12,
-                background: "rgba(255, 255, 255, 0.06)",
-                border: "1px solid rgba(255, 255, 255, 0.10)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flex: "0 0 auto",
-              }}
-            >
+          <div className="analysis-mobile-only analysis-mobile-notice">
+            <div className="analysis-mobile-notice__iconWrap">
               <Maximize2 size={18} color="#e5e7eb" />
             </div>
-            <div style={{ flex: "1 1 auto" }}>
-              <div
-                style={{
-                  color: "#fff",
-                  fontWeight: 800,
-                  fontSize: 14,
-                  marginBottom: 4,
-                }}
-              >
+            <div className="analysis-mobile-notice__body">
+              <div className="analysis-mobile-notice__title">
                 {UI_MOBILE_NOTICE_TITLE}
               </div>
-              <div
-                style={{
-                  color: "#a1a1aa",
-                  fontWeight: 600,
-                  fontSize: 13,
-                  lineHeight: 1.35,
-                }}
-              >
+              <div className="analysis-mobile-notice__text">
                 {UI_MOBILE_NOTICE_P}
               </div>
             </div>
           </div>
 
           {/* Stats Cards */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-              gap: "16px",
-              marginBottom: "20px",
-            }}
-          >
+          <div className="analysis-stats-grid">
             <StatCard
               title={UI_FASTEST_LAP}
               value={
@@ -1022,13 +907,6 @@ export const AnalysisPage: React.FC<Props> = () => {
                       align="right"
                       layout="vertical"
                       content={renderPositionLegend}
-                      wrapperStyle={{
-                        paddingLeft: "30px",
-                        paddingTop: "6px",
-                        fontSize: "12px",
-                        maxHeight: "550px",
-                        overflowY: "auto",
-                      }}
                     />
                     {driversWithPositions.map((driverInfo) => (
                       <Line
@@ -1059,12 +937,7 @@ export const AnalysisPage: React.FC<Props> = () => {
 
             {/* Charts Grid */}
             <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(12, 1fr)",
-                gap: "24px",
-                marginBottom: "32px",
-              }}
+              className="analysis-charts-grid"
             >
               {/* 1. Lap Evolution (Line Chart) */}
               {selectedDrivers.length > 0 && (
@@ -1109,22 +982,7 @@ export const AnalysisPage: React.FC<Props> = () => {
                         width={100}
                       />
                       <Tooltip
-                        contentStyle={{
-                          background: "rgba(0, 0, 0, 0.95)",
-                          border: "1px solid rgba(255, 255, 255, 0.2)",
-                          borderRadius: "10px",
-                          padding: "12px",
-                        }}
-                        formatter={(value: any, name: string) => {
-                          const driver = allDrivers.find(
-                            (d) => d.driverNumber === name
-                          );
-                          return [
-                            formatLapTimeShort(value),
-                            driver?.driver || name,
-                          ];
-                        }}
-                        labelFormatter={(l) => `${UI_LAP_EVOLUTION_X}: ${l}`}
+                        content={renderLapEvolutionTooltip}
                       />
                       <Legend
                         verticalAlign="top"
@@ -1192,20 +1050,7 @@ export const AnalysisPage: React.FC<Props> = () => {
                         interval={0}
                       />
                       <Tooltip
-                        contentStyle={{
-                          background: "rgba(0,0,0,0.9)",
-                          border: "1px solid rgba(255,255,255,0.15)",
-                          borderRadius: 10,
-                        }}
-                        formatter={(v, key) => {
-                          if (key === "delta")
-                            return [
-                              "+" + formatLapTimeShort(Number(v)),
-                              "Delta",
-                            ];
-                          return [formatLapTimeShort(Number(v)), "Best Lap"];
-                        }}
-                        labelFormatter={(label) => label}
+                        content={renderBestLapDeltaTooltip}
                       />
                       <Bar dataKey="delta" radius={[0, 6, 6, 0]}>
                         {bestLapDelta.map((entry, index) => (
@@ -1254,13 +1099,7 @@ export const AnalysisPage: React.FC<Props> = () => {
                         interval={0}
                       />
                       <Tooltip
-                        contentStyle={{
-                          background: "rgba(0,0,0,0.9)",
-                          border: "1px solid rgba(255,255,255,0.15)",
-                          borderRadius: 10,
-                        }}
-                        formatter={(v) => formatLapTimeShort(Number(v))}
-                        labelFormatter={(label) => label}
+                        content={renderConsistencyTooltip}
                       />
                       <Bar dataKey="consistency" radius={[0, 6, 6, 0]}>
                         {consistencyData.map((entry, index) => (
@@ -1279,76 +1118,21 @@ export const AnalysisPage: React.FC<Props> = () => {
       {/* No Data State */}
       {!busy && lapData.length === 0 && (
         <div
-          style={{
-            gridColumn: "span 12",
-            background: "rgba(255, 255, 255, 0.04)",
-            border: "1px solid rgba(255, 255, 255, 0.1)",
-            borderRadius: "16px",
-            padding: "60px 24px",
-            textAlign: "center",
-          }}
+          className="analysis-no-data"
         >
           <Activity
             size={48}
             color="#9ca3af"
-            style={{ margin: "0 auto 16px" }}
+            className="analysis-no-data__icon"
           />
-          <h3 style={{ fontSize: "20px", color: "#fff", marginBottom: "8px" }}>
+          <h3 className="analysis-no-data__title">
             {UI_NO_DATA}
           </h3>
-          <p style={{ fontSize: "15px", color: "#9ca3af" }}>
+          <p className="analysis-no-data__subtitle">
             Please select a different race or check back later.
           </p>
         </div>
       )}
-
-      <style>{`
-                .analysis-page {
-                    padding: var(--space-8) 0;
-                }
-
-                /* Inline styles exist on some nodes; use !important to reliably toggle */
-                .analysis-mobile-only { display: none !important; }
-                .analysis-mobile-top3 { display: none !important; }
-                .analysis-desktop-only { display: block; }
-
-                /* Make the hero section responsive on smaller desktops/tablets */
-                @media (max-width: 1100px) {
-                    .analysis-hero-grid {
-                        grid-template-columns: 1fr !important;
-                        justify-items: stretch !important;
-                    }
-                }
-
-                @media (max-width: 640px) {
-                    .analysis-page {
-                        padding: var(--space-6) 0;
-                    }
-
-                    .analysis-mobile-only { display: flex !important; }
-                    .analysis-mobile-top3 { display: block !important; }
-                    .analysis-desktop-only { display: none !important; }
-
-                    .analysis-race-selector {
-                        flex-direction: column !important;
-                        align-items: stretch !important;
-                        gap: 10px !important;
-                    }
-
-                    .analysis-race-select {
-                        width: 100% !important;
-                        min-width: 0 !important;
-                    }
-                }
-
-                /* Prevent overflow on medium widths as well */
-                @media (max-width: 960px) {
-                    .analysis-race-select {
-                        width: min(520px, 100%) !important;
-                        min-width: 0 !important;
-                    }
-                }
-            `}</style>
     </div>
   );
 };
