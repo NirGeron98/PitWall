@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { X, Activity, Zap, TrendingUp, Clock } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, AreaChart, Area } from 'recharts';
+import { X, Activity } from 'lucide-react';
+import { XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, AreaChart, Area } from 'recharts';
 import { getTelemetry, type TelemetryPoint } from '../services/api';
 import type { Driver } from '../types/f1';
 
