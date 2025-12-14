@@ -225,7 +225,7 @@ export const RaceDetailsModal: React.FC<Props> = ({ isOpen, onClose, race, onDri
                         scrollbarColor: 'rgba(255,255,255,0.2) transparent'
                     }}>
                         {/* Session Tabs */}
-                        <div className="flex-row" style={{ gap: '10px', marginBottom: '24px', flexWrap: 'wrap' }}>
+                        <div className="flex-row" style={{ gap: '6px', marginBottom: '16px', flexWrap: 'wrap' }}>
                             {['P1', 'P2', 'P3', 'Q', 'R'].map(code => (
                                 <button
                                 key={code}
@@ -251,14 +251,17 @@ export const RaceDetailsModal: React.FC<Props> = ({ isOpen, onClose, race, onDri
                         const driverMeta = drivers.find(d => d.DriverNumber === res.DriverNumber);
                         const teamColor = driverMeta?.TeamColor || 'var(--border)';
 
-                        const posClass =
-                            res.Position === 1
+                                const posNum = Number(res.Position);
+                                const posClass =
+                                    activeSession === 'R'
+                                        ? posNum === 1
                                             ? 'medal-gold'
-                                            : res.Position === 2
+                                            : posNum === 2
                                             ? 'medal-silver'
-                                            : res.Position === 3
+                                            : posNum === 3
                                             ? 'medal-bronze'
-                                            : 'medal-default';
+                                            : 'medal-default'
+                                        : 'medal-default';
 
                                     const statusLabel =
                                         res.Status === 'Finished'

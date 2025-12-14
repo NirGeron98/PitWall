@@ -77,45 +77,18 @@ export const Header: React.FC<Props> = ({ year, onYearChange, userEmail, navItem
             {mobileNavOpen ? <X size={22} /> : <Menu size={22} />}
           </button>
 
-          {/* Season Selector */}
-          <div className="flex-row items-center" style={{ gap: '8px' }}>
-            <span className="text-muted text-xs font-bold uppercase tracking-wider hidden-mobile">Season</span>
-            <div style={{ position: 'relative' }}>
-              <select
-                value={year}
-                onChange={(e) => onYearChange(Number(e.target.value))}
-                className="year-select"
-                style={{
-                  appearance: 'none',
-                  paddingRight: '32px',
-                  background: 'var(--bg-subtle)',
-                  border: '1px solid var(--border)',
-                  fontWeight: 700
-                }}
-              >
-                <option value={2020}>2020</option>
-                <option value={2021}>2021</option>
-                <option value={2022}>2022</option>
-                <option value={2023}>2023</option>
-                <option value={2024}>2024</option>
-                <option value={2025}>2025</option>
-              </select>
-              <Calendar size={14} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-secondary)' }} />
-            </div>
-          </div>
-
           <div style={{ width: '1px', height: '24px', background: 'var(--border)' }} />
 
-          {/* User Profile */}
+          {/* User Profile (desktop only) */}
           {userEmail ? (
             <button
               onClick={logout}
-              className="btn-reset flex-row items-center"
-              style={{ color: 'var(--accent-red)', padding: '8px', gap: '6px', fontWeight: 600 }}
+              className="btn-reset flex-row items-center hidden-mobile"
+              style={{ color: 'var(--accent-red)', padding: '8px', gap: '6px', fontWeight: 700, whiteSpace: 'nowrap' }}
               title="Sign Out"
             >
               <LogOut size={20} className="hover-red" />
-              <span className="hidden-mobile">Sign out</span>
+              <span>Sign out</span>
             </button>
           ) : (
             <div className="flex-row items-center" style={{ gap: '8px', opacity: 0.5 }}>
@@ -143,15 +116,53 @@ export const Header: React.FC<Props> = ({ year, onYearChange, userEmail, navItem
                 </Link>
               );
             })}
+            {userEmail && (
+              <button
+                onClick={() => { setMobileNavOpen(false); logout(); }}
+                className="btn-reset nav-link mobile-nav-link"
+                style={{ justifyContent: 'flex-start', gap: '10px', color: 'var(--accent-red)', fontWeight: 700 }}
+              >
+                <LogOut size={18} />
+                Sign out
+              </button>
+            )}
           </div>
         )}
+      </div>
+      {/* Year row centered under main bar */}
+      <div className="header-year-row">
+        <div className="flex-row items-center" style={{ gap: '8px' }}>
+          <span className="text-muted text-xs font-bold uppercase tracking-wider hidden-mobile">Season</span>
+          <div style={{ position: 'relative' }}>
+            <select
+              value={year}
+              onChange={(e) => onYearChange(Number(e.target.value))}
+              className="year-select"
+              style={{
+                appearance: 'none',
+                paddingRight: '32px',
+                background: 'var(--bg-subtle)',
+                border: '1px solid var(--border)',
+                fontWeight: 700
+              }}
+            >
+              <option value={2020}>2020</option>
+              <option value={2021}>2021</option>
+              <option value={2022}>2022</option>
+              <option value={2023}>2023</option>
+              <option value={2024}>2024</option>
+              <option value={2025}>2025</option>
+            </select>
+            <Calendar size={14} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-secondary)' }} />
+          </div>
+        </div>
       </div>
       <style>{`
         .header-grid {
           display: grid;
-          grid-template-columns: 1fr 2fr 1fr;
+          grid-template-columns: auto 1fr auto;
           align-items: center;
-          gap: 16px;
+          gap: 12px;
         }
 
         .header-nav {
@@ -160,8 +171,15 @@ export const Header: React.FC<Props> = ({ year, onYearChange, userEmail, navItem
         }
 
         .header-actions {
-          gap: 16px;
+          gap: 12px;
           justify-content: flex-end;
+        }
+
+        .header-year-row {
+          display: flex;
+          justify-content: center;
+          width: 100%;
+          margin-top: 8px;
         }
 
         @media (max-width: 960px) {
@@ -172,8 +190,8 @@ export const Header: React.FC<Props> = ({ year, onYearChange, userEmail, navItem
           }
 
           .header-grid {
-            grid-template-columns: 1fr;
-            row-gap: 12px;
+            grid-template-columns: auto 1fr auto;
+            row-gap: 8px;
             position: relative;
           }
 
@@ -183,8 +201,7 @@ export const Header: React.FC<Props> = ({ year, onYearChange, userEmail, navItem
 
           .header-actions {
             justify-content: flex-end;
-            flex-wrap: wrap;
-            gap: 10px;
+            gap: 8px;
             position: relative;
           }
 
@@ -197,7 +214,6 @@ export const Header: React.FC<Props> = ({ year, onYearChange, userEmail, navItem
             border: 1px solid var(--border);
             background: var(--bg-subtle);
             color: var(--text-primary);
-            margin-left: 8px;
           }
 
           .mobile-nav-panel {
@@ -222,6 +238,10 @@ export const Header: React.FC<Props> = ({ year, onYearChange, userEmail, navItem
             justify-content: flex-start;
             border-radius: 10px;
             padding: 10px 12px;
+          }
+
+          .header-year-row {
+            margin-top: 6px;
           }
         }
 

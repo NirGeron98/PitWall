@@ -986,24 +986,41 @@ button {
 .medal-gold {
   background: linear-gradient(135deg, #2b2410, #ffd700);
   color: #1b1405;
-  border-color: rgba(255, 215, 0, 0.5);
+  border-color: rgba(255, 215, 0, 0.6);
 }
 
 .medal-silver {
   background: linear-gradient(135deg, #1f2125, #c0c0c0);
   color: #0f1114;
-  border-color: rgba(192, 192, 192, 0.5);
+  border-color: rgba(192, 192, 192, 0.6);
 }
 
 .medal-bronze {
   background: linear-gradient(135deg, #21160f, #cd7f32);
   color: #120b04;
-  border-color: rgba(205, 127, 50, 0.5);
+  border-color: rgba(205, 127, 50, 0.6);
 }
 
 .medal-default {
   background: var(--bg-highlight);
   color: var(--text-primary);
+}
+
+/* apply medal colors to race result pills as well */
+.race-result-card .medal-gold {
+  background: linear-gradient(135deg, #2b2410, #ffd700);
+  color: #1b1405;
+  border-color: rgba(255, 215, 0, 0.5);
+}
+.race-result-card .medal-silver {
+  background: linear-gradient(135deg, #1f2125, #c0c0c0);
+  color: #0f1114;
+  border-color: rgba(192, 192, 192, 0.5);
+}
+.race-result-card .medal-bronze {
+  background: linear-gradient(135deg, #21160f, #cd7f32);
+  color: #120b04;
+  border-color: rgba(205, 127, 50, 0.5);
 }
 .medal-gold {
   background: linear-gradient(135deg, #2b2410, #ffd700);
