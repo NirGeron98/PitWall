@@ -26,8 +26,10 @@ export const DriverProfile: React.FC<Props> = ({ driver, onBack }) => {
             .finally(() => setLoading(false));
     }, [year, driver, fetchDriverStatsWithCache]);
 
-    // Calculate totals locally
-    const totalPoints = stats?.results.reduce((sum, race) => sum + (Number(race.points) || 0), 0) || 0;
+    // Points: prefer official standings points (includes sprints/bonuses), fallback to summing race results.
+    const pointsFromStandings = Number(stats?.standingPoints);
+    const pointsFromRaces = stats?.results.reduce((sum, race) => sum + (Number(race.points) || 0), 0) || 0;
+    const totalPoints = Number.isFinite(pointsFromStandings) ? pointsFromStandings : pointsFromRaces;
     const bestFinish = stats && stats.results.length > 0
         ? Math.min(...stats.results.map(r => Number(r.position)))
         : '-';
@@ -216,7 +218,6 @@ export const DriverProfile: React.FC<Props> = ({ driver, onBack }) => {
                                     <tbody>
                                         {stats?.results.map((race, idx) => {
                                             const finishPos = Number(race.position);
-                                            const isPodium = finishPos <= 3;
                                             const isWin = finishPos === 1;
                                             const podiumColor = isWin ? '#FFD700' : finishPos === 2 ? '#C0C0C0' : finishPos === 3 ? '#CD7F32' : undefined;
                                             return (

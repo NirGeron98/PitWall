@@ -125,6 +125,12 @@ button {
   width: 100%;
 }
 
+/* Slightly wider than default, but still capped (Favorites/Standings) */
+.app-main.app-main--roomy {
+  max-width: 1400px;
+  width: 100%;
+}
+
 /* Flex & Grid */
 .flex-row {
   display: flex;
@@ -238,7 +244,7 @@ button {
 
 .standings-wrapper {
   width: 100%;
-  max-width: 1400px;
+  max-width: none;
   margin: 0 auto;
   padding: 0 var(--space-2);
 }
@@ -1465,7 +1471,8 @@ button {
   text-align: center;
   gap: 10px;
   padding: 14px 18px;
-  margin: 0 0 16px;
+  margin: 0 auto 16px;
+  width: min(720px, 100%);
   border: 1px solid var(--border);
   border-radius: 14px;
   background: linear-gradient(145deg, rgba(17,17,20,0.9), rgba(28,28,33,0.9));

@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   BrowserRouter,
@@ -165,6 +165,21 @@ function AppShell() {
     // Reset search when switching sections
     setSearch("");
   }, [activeView]);
+
+  // Dynamic document title per route
+  useEffect(() => {
+    let title = "PitWall";
+    if (activeView === "races") title = "PitWall - Race Calendar";
+    else if (activeView === "drivers") title = "PitWall - Driver Roster";
+    else if (activeView === "profile")
+      title = `PitWall - ${selectedDriver?.BroadcastName || "Driver Profile"}`;
+    else if (activeView === "standings") title = "PitWall - Standings";
+    else if (activeView === "favorites") title = "PitWall - Favorites";
+    else if (activeView === "compare") title = "PitWall - Driver Comparison";
+    else if (activeView === "analysis") title = "PitWall - Analysis";
+
+    document.title = title;
+  }, [activeView, selectedDriver]);
 
   const handleToggleFavorite = async (driverNum: string) => {
     try {
@@ -357,7 +372,15 @@ function AppShell() {
         navItems={navItems}
       />
 
-      <main className={`container app-main ${activeView === "analysis" ? "app-main--wide" : ""} ${activeView === "profile" ? "app-main--profile" : ""}`}>
+      <main
+        className={`container app-main ${
+          activeView === "analysis"
+            ? "app-main--wide"
+            : activeView === "favorites" || activeView === "standings"
+              ? "app-main--roomy"
+              : ""
+        } ${activeView === "profile" ? "app-main--profile" : ""}`}
+      >
                   <div className="page-header-compact">
           <h1 className="page-title-compact">
             {activeView === "races" && "Race Calendar"}
@@ -617,4 +640,8 @@ export default function App() {
     </BrowserRouter>
   );
 }
+
+
+
+
 

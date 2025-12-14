@@ -42,8 +42,11 @@ export const Header: React.FC<Props> = ({ year, onYearChange, userEmail, navItem
       <div className="container header-grid" style={{ position: 'relative' }}>
         {/* Brand */}
         <div className="flex-row items-center" style={{ gap: '12px' }}>
-          <div className="brand" style={{ fontSize: '1.5rem', lineHeight: 1 }}>
-            PIT<span style={{ color: 'var(--accent-red)' }}>WALL</span>
+          <div className="brand-lockup">
+            <span className="brand-pill">
+              <span className="brand-pit">PIT</span>
+              <span className="brand-wall">WALL</span>
+            </span>
           </div>
         </div>
 
@@ -78,6 +81,46 @@ export const Header: React.FC<Props> = ({ year, onYearChange, userEmail, navItem
           </button>
 
           <div style={{ width: '1px', height: '24px', background: 'var(--border)' }} />
+
+          {/* Season Selector */}
+          <div className="flex-row items-center season-picker" style={{ gap: '8px' }}>
+            <span className="text-muted text-xs font-bold uppercase tracking-wider hidden-mobile">
+              Season
+            </span>
+            <div className="year-select-wrap">
+              <select
+                value={year}
+                onChange={(e) => onYearChange(Number(e.target.value))}
+                className="year-select"
+                style={{
+                  appearance: 'none',
+                  paddingRight: '32px',
+                  background: 'var(--bg-subtle)',
+                  border: '1px solid var(--border)',
+                  fontWeight: 700,
+                }}
+              >
+                <option value={2020}>2020</option>
+                <option value={2021}>2021</option>
+                <option value={2022}>2022</option>
+                <option value={2023}>2023</option>
+                <option value={2024}>2024</option>
+                <option value={2025}>2025</option>
+              </select>
+              <Calendar
+                size={14}
+                className="year-select-icon"
+                style={{
+                  position: 'absolute',
+                  right: 10,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  pointerEvents: 'none',
+                  color: 'var(--text-secondary)',
+                }}
+              />
+            </div>
+          </div>
 
           {/* User Profile (desktop only) */}
           {userEmail ? (
@@ -129,40 +172,41 @@ export const Header: React.FC<Props> = ({ year, onYearChange, userEmail, navItem
           </div>
         )}
       </div>
-      {/* Year row centered under main bar */}
-      <div className="header-year-row">
-        <div className="flex-row items-center" style={{ gap: '8px' }}>
-          <span className="text-muted text-xs font-bold uppercase tracking-wider hidden-mobile">Season</span>
-          <div style={{ position: 'relative' }}>
-            <select
-              value={year}
-              onChange={(e) => onYearChange(Number(e.target.value))}
-              className="year-select"
-              style={{
-                appearance: 'none',
-                paddingRight: '32px',
-                background: 'var(--bg-subtle)',
-                border: '1px solid var(--border)',
-                fontWeight: 700
-              }}
-            >
-              <option value={2020}>2020</option>
-              <option value={2021}>2021</option>
-              <option value={2022}>2022</option>
-              <option value={2023}>2023</option>
-              <option value={2024}>2024</option>
-              <option value={2025}>2025</option>
-            </select>
-            <Calendar size={14} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-secondary)' }} />
-          </div>
-        </div>
-      </div>
       <style>{`
         .header-grid {
           display: grid;
           grid-template-columns: auto 1fr auto;
           align-items: center;
           gap: 12px;
+        }
+
+        .brand-lockup {
+          display: flex;
+          align-items: center;
+        }
+
+        .brand-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 6px 10px;
+          border-radius: 12px;
+          background: linear-gradient(135deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+          border: 1px solid var(--border);
+        }
+
+        .brand-pit {
+          font-weight: 800;
+          color: #0b0b0d;
+          background: #f5f5f5;
+          padding: 2px 6px;
+          border-radius: 8px;
+        }
+
+        .brand-wall {
+          font-weight: 900;
+          color: var(--accent-red);
+          letter-spacing: 0.02em;
         }
 
         .header-actions button {
@@ -180,11 +224,16 @@ export const Header: React.FC<Props> = ({ year, onYearChange, userEmail, navItem
           justify-content: flex-end;
         }
 
-        .header-year-row {
-          display: flex;
-          justify-content: center;
-          width: 100%;
-          margin-top: 8px;
+        .year-select-wrap {
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+        }
+
+        .header-actions .year-select {
+          height: 38px;
+          padding-top: 0;
+          padding-bottom: 0;
         }
 
         @media (max-width: 960px) {

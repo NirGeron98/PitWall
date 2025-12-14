@@ -141,11 +141,30 @@ export const AuthPage: React.FC<Props> = ({
             </div>
 
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {mode === 'register' && (
+                <div className="flex-col" style={{ gap: '6px' }}>
+                  <label className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Full Name</label>
+                  <input
+                    type="text"
+                    required
+                    autoFocus
+                    autoComplete="name"
+                    style={{ width: '100%' }}
+                    className="search-input"
+                    placeholder="e.g. Ayrton Senna"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                  />
+                </div>
+              )}
+
               <div className="flex-col" style={{ gap: '6px' }}>
                 <label className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Email Address</label>
                 <input
                   type="email"
                   required
+                  autoFocus={mode === 'login'}
+                  autoComplete={mode === 'login' ? 'email' : 'email'}
                   style={{ width: '100%' }}
                   className="search-input"
                   placeholder="engineer@pitwall.com"
@@ -159,6 +178,7 @@ export const AuthPage: React.FC<Props> = ({
                 <input
                   type="password"
                   required
+                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                   style={{ width: '100%' }}
                   className="search-input"
                   placeholder="••••••••"
@@ -169,25 +189,11 @@ export const AuthPage: React.FC<Props> = ({
 
               {mode === 'register' && (
                 <div className="flex-col" style={{ gap: '6px' }}>
-                  <label className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Full Name</label>
-                  <input
-                    type="text"
-                    required
-                    style={{ width: '100%' }}
-                    className="search-input"
-                    placeholder="e.g. Ayrton Senna"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                  />
-                </div>
-              )}
-
-              {mode === 'register' && (
-                <div className="flex-col" style={{ gap: '6px' }}>
                   <label className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Confirm Password</label>
                   <input
                     type="password"
                     required
+                    autoComplete="new-password"
                     style={{ width: '100%' }}
                     className="search-input"
                     placeholder="••••••••"

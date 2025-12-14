@@ -1,25 +1,49 @@
-# server/database.py
 import os
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, UniqueConstraint, text
+import sys
+from pathlib import Path
+from dotenv import load_dotenv
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# 1. Database Configuration
-# Use environment variable for Prod (Render/Neon), default to local SQLite for Dev.
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./pitwall.db")
+"""
+Database setup.
+This configuration is strictly for PostgreSQL (Production/Render).
+"""
 
-# Fix for Render: SQLAlchemy requires 'postgresql://', but Render provides 'postgres://'
+# ---------------------------------------------------------
+# 1. Configuration & Connection
+# ---------------------------------------------------------ַ
+
+# Robustly find the .env file relative to this script
+env_path = Path(__file__).parent / ".env"
+load_dotenv(dotenv_path=env_path)
+
+# Fetch the connection string from the environment
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+# specific check to help debug if .env is not found
+if not DATABASE_URL:
+    print(f"DEBUG: Could not find .env file at: {env_path}")
+    sys.exit("Error: DATABASE_URL environment variable is not set. Please check your .env file.")
+
+# Fix for Render: SQLAlchemy requires 'postgresql://', but Render often provides 'postgres://'
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-# Connect args are needed only for SQLite to allow multi-threaded access
-connect_args = {"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
+# Create the engine
+# Note: PostgreSQL does NOT use 'check_same_thread', so we don't pass connect_args
+engine = create_engine(DATABASE_URL)
 
-engine = create_engine(DATABASE_URL, connect_args=connect_args)
+# Create SessionLocal class
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+# Base class for models
 Base = declarative_base()
 
+
+# ---------------------------------------------------------
 # 2. Database Models (Tables)
+# ---------------------------------------------------------
 
 class RaceModel(Base):
     """
@@ -107,11 +131,10 @@ class SessionResultModel(Base):
     status = Column(String)
     points = Column(Integer)
 
-
 class UserModel(Base):
     """
     Minimal user model for authentication.
-    Passwords are stored as salted hashes (see main.py helpers).
+    Passwords are stored as salted hashes.
     """
     __tablename__ = "users"
 
@@ -119,7 +142,6 @@ class UserModel(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
     full_name = Column(String, nullable=True)
-
 
 class FavoriteModel(Base):
     """
@@ -136,19 +158,10 @@ class FavoriteModel(Base):
         UniqueConstraint("user_id", "driver_id", "team_id", name="uq_user_favorite"),
     )
 
+# ---------------------------------------------------------
 # 3. Initialization Function
+# ---------------------------------------------------------
+
 def init_db():
     """Creates tables if they do not exist."""
     Base.metadata.create_all(bind=engine)
-    _ensure_full_name_column()
-
-def _ensure_full_name_column():
-    """Add full_name to users table if missing (SQLite-safe)."""
-    if "sqlite" not in DATABASE_URL:
-        return
-    with engine.connect() as conn:
-        res = conn.exec_driver_sql("PRAGMA table_info(users)").fetchall()
-        cols = [r[1] for r in res]
-        if "full_name" not in cols:
-            conn.exec_driver_sql("ALTER TABLE users ADD COLUMN full_name VARCHAR")
-            conn.commit()
