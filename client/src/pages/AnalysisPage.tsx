@@ -111,6 +111,13 @@ export const AnalysisPage: React.FC<Props> = () => {
   useEffect(() => {
     const loadData = async () => {
       if (!selectedRound) return;
+      // Guard: server may not have 2025 analysis data yet; avoid noisy 404s
+      if (!year || year > 2024) {
+        setLapData([]);
+        setSessionDrivers([]);
+        setBusy(false);
+        return;
+      }
       setBusy(true);
       try {
         // Fetch all lap data for this race (no filtering so we capture mid-season replacements)
@@ -123,6 +130,7 @@ export const AnalysisPage: React.FC<Props> = () => {
       } catch (err) {
         console.error("Lap analysis fetch failed", err);
         setLapData([]);
+        setSessionDrivers([]);
       } finally {
         setBusy(false);
       }
