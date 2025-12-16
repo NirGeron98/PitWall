@@ -49,7 +49,27 @@ def cors_allow_origins() -> List[str]:
 
 
 # --- FastF1 cache ---
-CACHE_DIR: str = os.getenv("FASTF1_CACHE_DIR", "cache")
+def _default_cache_dir() -> str:
+    """Choose a sensible default FastF1 cache directory.
+
+    The repo includes a top-level 'cache/' directory (PitWall/cache). If we run the
+    API from a different working directory (e.g. PitWall/server), a relative
+    'cache' path points to the wrong place and FastF1 will re-download data.
+    """
+
+    # server/app/core/config.py -> PitWall/server/app/core
+    server_root = Path(__file__).resolve().parents[2]  # PitWall/server
+    repo_root = Path(__file__).resolve().parents[3]  # PitWall
+
+    repo_cache = repo_root / "cache"
+    if repo_cache.exists():
+        return str(repo_cache)
+
+    # Fallback for deployments that expect a server-local cache.
+    return str(server_root / "cache")
+
+
+CACHE_DIR: str = os.getenv("FASTF1_CACHE_DIR") or _default_cache_dir()
 
 
 # --- Database ---
