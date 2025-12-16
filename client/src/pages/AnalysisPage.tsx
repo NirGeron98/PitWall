@@ -108,24 +108,19 @@ export const AnalysisPage: React.FC<Props> = () => {
   }, [year, selectedRound, fetchSessionResultsWithCache]);
 
   // Load lap data (fast operation)
+  // Backend now computes on-demand, so we can try for any year
   useEffect(() => {
     const loadData = async () => {
       if (!selectedRound) return;
-      // Guard: server may not have 2025 analysis data yet; avoid noisy 404s
-      if (!year || year > 2024) {
-        setLapData([]);
-        setSessionDrivers([]);
-        setBusy(false);
-        return;
-      }
       setBusy(true);
       try {
         // Fetch all lap data for this race (no filtering so we capture mid-season replacements)
+        // Backend will compute on-demand if not cached
         const lapsResp: LapAnalysisResponse = await getLapAnalysis(
           year,
           selectedRound
         );
-        setLapData(lapsResp.laps);
+        setLapData(lapsResp.laps || []);
         setSessionDrivers(lapsResp.drivers || []);
       } catch (err) {
         console.error("Lap analysis fetch failed", err);
