@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, UniqueConstraint, func
+from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.types import JSON
 
@@ -18,6 +18,12 @@ class RaceModel(Base):
     location = Column(String)
     date = Column(String)  # ISO format string
     event_format = Column(String)
+    
+    __table_args__ = (
+        # Composite index for the common query pattern: filter by year, order by round
+        # This makes queries like "WHERE year = X ORDER BY round" very fast
+        Index("idx_races_year_round", "year", "round"),
+    )
 
 
 class DriverModel(Base):

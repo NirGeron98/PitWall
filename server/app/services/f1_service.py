@@ -615,13 +615,23 @@ def cache_races_snapshot(year: int, db: Session) -> list[dict]:
     """
     Store a ready-to-serve snapshot of the races list in AppCacheModel.
     Returns the payload stored.
+    Optimized for performance: single query, efficient upsert.
     """
+    import time
+    query_start = time.time()
+    
+    # Single optimized query with explicit ordering
     races = (
         db.query(RaceModel)
         .filter(RaceModel.year == year)
         .order_by(RaceModel.round.asc())
         .all()
     )
+    query_elapsed = (time.time() - query_start) * 1000
+    
+    # Build minimal payload (only fields needed for RaceCard)
+    # EventDate is included for frontend compatibility (RaceCard uses Session5Date || EventDate)
+    build_start = time.time()
     payload = [
         {
             "RoundNumber": r.round,
@@ -629,16 +639,26 @@ def cache_races_snapshot(year: int, db: Session) -> list[dict]:
             "Country": r.country,
             "Location": r.location,
             "Session5Date": r.date,
+            "EventDate": r.date,  # Frontend compatibility: RaceCard uses Session5Date || EventDate
             "EventFormat": r.event_format,
         }
         for r in races
     ]
+    build_elapsed = (time.time() - build_start) * 1000
 
+    # Efficient upsert: cache the payload (even if empty) to avoid repeated DB queries
+    cache_start = time.time()
     key = f"all_races_{year}"
+    # Try to get existing first (for update path)
     existing = db.query(AppCacheModel).filter(AppCacheModel.key == key).first()
     if existing:
         existing.data = payload
     else:
         db.add(AppCacheModel(key=key, data=payload))
     db.commit()
+    cache_elapsed = (time.time() - cache_start) * 1000
+    
+    total_elapsed = (time.time() - query_start) * 1000
+    print(f"[PERF] cache_races_snapshot({year}): query={query_elapsed:.2f}ms, build={build_elapsed:.2f}ms, cache_write={cache_elapsed:.2f}ms, total={total_elapsed:.2f}ms")
+    
     return payload
