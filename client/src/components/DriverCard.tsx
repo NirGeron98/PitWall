@@ -3,6 +3,7 @@ import type { Driver } from '../types/f1';
 import { Star, Activity } from 'lucide-react';
 import { Card, CardHeader, CardBody, CardFooter } from './ui/Card';
 import { DriverAvatar } from './common/DriverAvatar';
+import { formatBroadcastName } from '../utils/formatters';
 
 interface Props {
   driver: Driver;
@@ -84,7 +85,7 @@ export const DriverCard: React.FC<Props> = ({
 
         <div style={{ minWidth: 0 }}>
           <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>
-            {driver.BroadcastName}
+            {formatBroadcastName(driver.BroadcastName)}
           </h3>
           <p className="text-muted text-sm" style={{ margin: '4px 0 0' }}>{driver.TeamName}</p>
         </div>

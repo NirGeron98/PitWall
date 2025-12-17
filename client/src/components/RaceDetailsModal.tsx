@@ -4,6 +4,7 @@ import type { RaceEvent, RaceResult } from '../types/f1';
 import { useData } from '../contexts/DataContext';
 import { getRaceResults } from '../services/api';
 import { DriverAvatar } from './common/DriverAvatar';
+import { formatBroadcastName } from '../utils/formatters';
 
 interface Props {
     isOpen: boolean;
@@ -317,7 +318,7 @@ export const RaceDetailsModal: React.FC<Props> = ({ isOpen, onClose, race, onDri
                                     />
                                     <div className="race-driver-meta">
                                         <div className="race-driver-name">
-                                            {res.BroadcastName}
+                                            {formatBroadcastName(res.BroadcastName)}
                                                         <span className="race-driver-number">#{res.DriverNumber}</span>
                                                     </div>
                                                     <div className="race-team-name">{res.TeamName}</div>

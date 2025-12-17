@@ -26,3 +26,22 @@ export const formatLapTimeShort = (ms?: number | null) => {
     const minutes = Math.floor(ms / 60000);
     return `${minutes}:${seconds.padStart(6, "0")}`;
 };
+
+/**
+ * Formats a driver's broadcast name.
+ * Ensures single-letter initials include a trailing dot (e.g., "L NORRIS" -> "L. NORRIS").
+ */
+export const formatBroadcastName = (name?: string | null) => {
+    const raw = (name || "").trim();
+    if (!raw) return "";
+
+    // Match: single letter initial, optional dot, whitespace, then the rest of the name
+    const match = raw.match(/^([A-Za-z])\.?\s+(.+)$/);
+    if (!match) return raw;
+
+    const initial = match[1].toUpperCase();
+    const rest = match[2].trim();
+    if (!rest) return `${initial}.`;
+
+    return `${initial}. ${rest}`;
+};
