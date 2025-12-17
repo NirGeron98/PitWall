@@ -60,20 +60,23 @@ def get_drivers(year: int, refresh: bool = False, db: Session = Depends(get_db))
 def sync_drivers(year: int, db: Session = Depends(get_db)):
     """
     Force sync driver roster from the latest completed session.
-    Use this endpoint to update drivers after mid-season team changes.
+    Use this endpoint to update drivers after mid-season team changes
+    (e.g., Tsunoda moving to Red Bull, Lawson to Racing Bulls).
     
     Returns:
-        Sync result with number of drivers updated and the round used
+        Sync result with number of drivers updated/inserted and the round used
     """
-    last_round = get_last_completed_round(year, db)
-    count = sync_drivers_for_year(year, db, force_refresh=True)
+    result = sync_drivers_for_year(year, db, force_refresh=True)
     
     return {
-        "success": count > 0,
+        "success": not result.get("error"),
         "year": year,
-        "round_synced": last_round or 1,
-        "drivers_count": count,
-        "message": f"Synced {count} drivers from round {last_round or 1}"
+        "round_synced": result.get("round", 1),
+        "updated": result.get("updated", 0),
+        "inserted": result.get("inserted", 0),
+        "total_drivers": result.get("total", 0),
+        "message": f"Synced from round {result.get('round', 1)}: {result.get('updated', 0)} updated, {result.get('inserted', 0)} inserted",
+        "error": result.get("error"),
     }
 
 

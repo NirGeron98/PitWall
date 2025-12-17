@@ -226,21 +226,16 @@ def _load_session_results(year: int, round: int, session_code: str, refresh: boo
 
     # Fetch fresh data from FastF1
     try:
-        print(f"[DEBUG] Loading {f1_session_code} for year={year}, round={round}")
         try:
             sess = fastf1.get_session(year, round, f1_session_code)
         except ValueError as ve:
-            print(f"[WARN] Session '{f1_session_code}' not found for this event: {ve}")
             return []
         except Exception as e:
-            print(f"[ERR] Failed to initialize session: {e}")
             raise
 
-        print(f"[DEBUG] Session: {sess.event['EventName']} - {sess.name} on {sess.date}")
         sess.load(laps=True, telemetry=False, weather=False, messages=False)
         results = sess.results.fillna("")
         laps = sess.laps
-        print(f"[DEBUG] Loaded {len(results)} results for {f1_session_code}")
 
         db.query(SessionResultModel).filter(
             SessionResultModel.year == year,
@@ -306,7 +301,6 @@ def _load_session_results(year: int, round: int, session_code: str, refresh: boo
         return output
 
     except Exception as e:
-        print(f"Error fetching session: {e}")
         traceback.print_exc()
         cached = (
             db.query(SessionResultModel)
@@ -340,7 +334,6 @@ def _to_ms(td):
 def get_driver_stats_from_jolpica(year: int, driver_number: str, db: Session):
     """Fetch driver season results and standings info from Jolpica (Ergast V2)."""
 
-    print(f"Fetching stats for Driver #{driver_number} in {year}...")
 
     driver_full_name = None
     try:
@@ -418,7 +411,6 @@ def get_driver_stats_from_jolpica(year: int, driver_number: str, db: Session):
         }
 
     except Exception as e:
-        print(f"Direct fetch failed: {e}")
         return {"standingPosition": None, "standingPoints": None, "results": []}
 
 
@@ -429,7 +421,6 @@ def process_year(year: int, db: Session) -> None:
 
     enable_fastf1_cache()
 
-    print(f"[ETL] Processing Year: {year}...")
 
     # --- RACES ---
     if db.query(RaceModel).filter(RaceModel.year == year).first():
@@ -454,16 +445,17 @@ def process_year(year: int, db: Session) -> None:
                 db.add(race_entry)
                 count += 1
             db.commit()
-            print(f"   Added {count} races.")
         except Exception as e:
             print(f"   Warning: Could not fetch schedule for {year}: {e}")
 
     # --- DRIVERS ---
-    # Fetch from latest completed round to reflect mid-season driver changes
-    if db.query(DriverModel).filter(DriverModel.year == year).first():
-        print(f"   Using existing drivers for {year}.")
+    # Always sync from latest completed round to reflect mid-season driver changes
+    # This ensures team swaps (e.g., Tsunoda to Red Bull) are captured
+    sync_result = sync_drivers_for_year(year, db, force_refresh=True)
+    if sync_result.get("error"):
+        print(f"   Warning: Driver sync failed for {year}: {sync_result.get('error')}")
     else:
-        sync_drivers_for_year(year, db, force_refresh=False)
+        print(f"   Driver sync for {year}: {sync_result.get('updated', 0)} updated, {sync_result.get('inserted', 0)} inserted (round {sync_result.get('round', 'N/A')})")
 
     # --- STANDINGS (Drivers/Teams) ---
     try:
@@ -498,7 +490,6 @@ def process_year(year: int, db: Session) -> None:
                     )
                 )
             db.commit()
-            print(f"   Cached driver standings for {year}.")
 
         if constructor_standings.content:
             df = constructor_standings.content[0].fillna("")
@@ -521,13 +512,11 @@ def process_year(year: int, db: Session) -> None:
                     )
                 )
             db.commit()
-            print(f"   Cached team standings for {year}.")
     except Exception as e:
         print(f"   Warning: Could not cache standings for {year}: {e}")
 
 
 def run_etl() -> None:
-    print("[ETL] Starting Multi-Year ETL Process...")
     init_db()
     db = SessionLocal()
 
@@ -537,7 +526,6 @@ def run_etl() -> None:
         process_year(year, db)
 
     db.close()
-    print("[ETL] Complete.")
 
 
 # --- Public exports for routers ---
@@ -576,18 +564,21 @@ def get_last_completed_round(year: int, db: Session) -> Optional[int]:
     return last_round
 
 
-def sync_drivers_for_year(year: int, db: Session, force_refresh: bool = False) -> int:
+def sync_drivers_for_year(year: int, db: Session, force_refresh: bool = False) -> dict:
     """
     Sync driver roster from the latest completed session for a given year.
-    This ensures mid-season driver changes (team swaps) are reflected.
+    Uses UPSERT logic: updates existing drivers, inserts new ones, preserves absent drivers.
+    
+    This ensures mid-season driver changes (team swaps like Tsunoda to Red Bull) are reflected
+    while keeping drivers who might be absent from a specific race (injury, suspension, etc.).
     
     Args:
         year: Season year to sync
         db: Database session
-        force_refresh: If True, delete existing drivers and re-fetch from latest round
+        force_refresh: If True, always fetch from FastF1 even if drivers exist
         
     Returns:
-        Number of drivers synced
+        Dict with sync results: {updated: int, inserted: int, total: int, round: int}
     """
     enable_fastf1_cache()
     
@@ -597,48 +588,91 @@ def sync_drivers_for_year(year: int, db: Session, force_refresh: bool = False) -
     # If no completed rounds, try round 1 (pre-season or early season)
     target_round = last_round if last_round else 1
     
-    print(f"[DRIVER_SYNC] Syncing drivers for {year} from round {target_round} (force_refresh={force_refresh})")
     
     # Check if we should skip (drivers exist and not forcing refresh)
     existing_count = db.query(DriverModel).filter(DriverModel.year == year).count()
     if existing_count > 0 and not force_refresh:
-        print(f"[DRIVER_SYNC] {existing_count} drivers already exist for {year}, skipping sync")
-        return existing_count
+        return {"updated": 0, "inserted": 0, "total": existing_count, "round": target_round, "skipped": True}
     
     try:
         # Load session from target round
         session = fastf1.get_session(year, target_round, "R")
         session.load(laps=False, telemetry=False, weather=False, messages=False)
         
-        # Delete existing drivers if force refresh
-        if force_refresh:
-            deleted = db.query(DriverModel).filter(DriverModel.year == year).delete()
-            print(f"[DRIVER_SYNC] Deleted {deleted} existing drivers for {year}")
+        # Build a map of existing drivers by driver_number for fast lookup
+        existing_drivers = {
+            d.driver_number: d 
+            for d in db.query(DriverModel).filter(DriverModel.year == year).all()
+        }
         
-        # Insert new drivers
-        count = 0
+        updated_count = 0
+        inserted_count = 0
+        
+        # Process each driver from the session
         for drv_code in session.drivers:
             drv = session.get_driver(drv_code)
-            driver_entry = DriverModel(
-                year=year,
-                driver_number=str(drv["DriverNumber"]),
-                broadcast_name=drv["BroadcastName"],
-                full_name=drv["FullName"],
-                team_name=drv["TeamName"],
-                team_color=f"#{drv['TeamColor']}" if drv["TeamColor"] else "#333333",
-                headshot_url=drv["HeadshotUrl"],
-            )
-            db.add(driver_entry)
-            count += 1
+            driver_number = str(drv["DriverNumber"])
+            team_name = drv["TeamName"]
+            team_color = f"#{drv['TeamColor']}" if drv["TeamColor"] else "#333333"
+            broadcast_name = drv["BroadcastName"]
+            full_name = drv["FullName"]
+            headshot_url = drv["HeadshotUrl"]
+            
+            if driver_number in existing_drivers:
+                # UPDATE: Driver exists, update their team info (handles mid-season transfers)
+                existing_driver = existing_drivers[driver_number]
+                
+                # Track if anything actually changed
+                changed = False
+                if existing_driver.team_name != team_name:
+                    existing_driver.team_name = team_name
+                    changed = True
+                if existing_driver.team_color != team_color:
+                    existing_driver.team_color = team_color
+                    changed = True
+                if existing_driver.broadcast_name != broadcast_name:
+                    existing_driver.broadcast_name = broadcast_name
+                    changed = True
+                if existing_driver.full_name != full_name:
+                    existing_driver.full_name = full_name
+                    changed = True
+                if existing_driver.headshot_url != headshot_url:
+                    existing_driver.headshot_url = headshot_url
+                    changed = True
+                
+                if changed:
+                    updated_count += 1
+            else:
+                # INSERT: New driver (mid-season replacement, rookie, etc.)
+                driver_entry = DriverModel(
+                    year=year,
+                    driver_number=driver_number,
+                    broadcast_name=broadcast_name,
+                    full_name=full_name,
+                    team_name=team_name,
+                    team_color=team_color,
+                    headshot_url=headshot_url,
+                )
+                db.add(driver_entry)
+                inserted_count += 1
         
         db.commit()
-        print(f"[DRIVER_SYNC] Added {count} drivers for {year} (round {target_round})")
-        return count
+        
+        total_count = db.query(DriverModel).filter(DriverModel.year == year).count()
+        
+        return {
+            "updated": updated_count,
+            "inserted": inserted_count,
+            "total": total_count,
+            "round": target_round,
+            "skipped": False
+        }
         
     except Exception as e:
-        print(f"[DRIVER_SYNC] Warning: Could not sync drivers for {year}: {e}")
+        import traceback
+        traceback.print_exc()
         db.rollback()
-        return 0
+        return {"updated": 0, "inserted": 0, "total": 0, "round": target_round, "error": str(e)}
 
 
 def prewarm_last_completed_race(year: int, db: Session) -> None:
@@ -651,7 +685,6 @@ def prewarm_last_completed_race(year: int, db: Session) -> None:
     try:
         # refresh=False so we reuse cache if already present; otherwise it will fetch once and store.
         _load_session_results(year, last_round, "R", refresh=False, db=db)
-        print(f"[PREWARM] Cached race results for {year} round {last_round}")
     except Exception as e:  # pragma: no cover - best effort prewarm
         print(f"[PREWARM] Failed to cache {year} round {last_round}: {e}")
 
@@ -704,6 +737,5 @@ def cache_races_snapshot(year: int, db: Session) -> list[dict]:
     cache_elapsed = (time.time() - cache_start) * 1000
     
     total_elapsed = (time.time() - query_start) * 1000
-    print(f"[PERF] cache_races_snapshot({year}): query={query_elapsed:.2f}ms, build={build_elapsed:.2f}ms, cache_write={cache_elapsed:.2f}ms, total={total_elapsed:.2f}ms")
     
     return payload

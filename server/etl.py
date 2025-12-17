@@ -2,16 +2,23 @@
 ETL entrypoint for precomputing heavy race/analysis payloads AND Race Results.
 
 Usage (from repo root):
+    # Cache analysis data for a specific race
     python server/etl.py --year 2024 --round 1
+
+    # Sync driver roster from latest completed round (handles mid-season transfers)
+    python server/etl.py --sync-drivers --year 2025
+
+    # Full ETL for all years (runs driver sync automatically)
+    python server/etl.py --full
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import fastf1
 import numpy as np
@@ -25,7 +32,16 @@ if str(ROOT / "app") not in sys.path:
     sys.path.append(str(ROOT / "app"))
 
 from app.database import SessionLocal, init_db  # noqa: E402
-from app.models import AppCacheModel  # noqa: E402
+from app.models import AppCacheModel, DriverModel, RaceModel  # noqa: E402
+from app.core.config import CACHE_DIR  # noqa: E402
+
+
+def enable_fastf1_cache() -> None:
+    """Enable FastF1's disk cache for faster subsequent loads."""
+    import os
+    if not os.path.exists(CACHE_DIR):
+        os.makedirs(CACHE_DIR)
+    fastf1.Cache.enable_cache(CACHE_DIR)
 
 
 def _save_cache(db, key: str, payload: Any) -> None:
@@ -322,7 +338,7 @@ def build_stints_payload(sess, driver: str) -> List[Dict[str, Any]]:
 
 def cache_race_analysis(year: int, round_: int) -> None:
     """Load once from FastF1, then write ALL heavy payloads into AppCacheModel."""
-    print(f"[ETL] Caching analysis for {year} round {round_}")
+    enable_fastf1_cache()
     sess = fastf1.get_session(year, round_, "R")
     sess.load(laps=True, telemetry=True, weather=False, messages=False)
 
@@ -331,12 +347,10 @@ def cache_race_analysis(year: int, round_: int) -> None:
         # 1. Race Results (The Classification Table)
         results_payload = build_race_results_payload(sess)
         _save_cache(db, f"race_results_{year}_{round_}", results_payload)
-        print(f"[ETL] Saved race results for {year}/{round_}")
 
         # 2. Laps (all drivers)
         laps_payload = build_laps_payload(sess)
         _save_cache(db, f"analysis_laps_{year}_{round_}", laps_payload)
-        print(f"[ETL] Saved lap analysis for {year}/{round_}")
 
         # 3. Per-driver telemetry and stints
         for code in sess.drivers:
@@ -349,20 +363,270 @@ def cache_race_analysis(year: int, round_: int) -> None:
             stints_payload = build_stints_payload(sess, driver_num)
             _save_cache(db, f"stints_{year}_{round_}_{driver_num}", stints_payload)
         
-        print(f"[ETL] Done processing drivers for {year}/{round_}")
 
     finally:
         db.close()
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Cache analysis/telemetry/stints data.")
-    parser.add_argument("--year", type=int, required=True)
-    parser.add_argument("--round", type=int, required=True, dest="round_")
-    args = parser.parse_args()
+# =============================================================================
+# DRIVER SYNC FUNCTIONS
+# =============================================================================
 
+def get_last_completed_round(year: int, db) -> Optional[int]:
+    """
+    Determine the most recently completed round for the given year based on race date.
+    Returns None if no race is in the past yet.
+    """
+    today = datetime.now(timezone.utc).date()
+    races = (
+        db.query(RaceModel)
+        .filter(RaceModel.year == year)
+        .order_by(RaceModel.round.asc())
+        .all()
+    )
+    last_round = None
+    for r in races:
+        try:
+            race_date = datetime.fromisoformat(str(r.date)).date()
+            if race_date <= today:
+                last_round = r.round
+            else:
+                break
+        except Exception:
+            continue
+    return last_round
+
+
+def sync_drivers_from_session(year: int, round_: int, db) -> Dict[str, Any]:
+    """
+    Sync driver roster from a specific session.
+    Uses UPSERT logic: updates existing drivers, inserts new ones, preserves absent drivers.
+    
+    This handles mid-season driver changes (team swaps like Tsunoda to Red Bull)
+    while keeping drivers who might be absent from a specific race.
+    
+    Args:
+        year: Season year
+        round_: Round number to sync from
+        db: Database session
+        
+    Returns:
+        Dict with sync results
+    """
+    
+    try:
+        session = fastf1.get_session(year, round_, "R")
+        session.load(laps=False, telemetry=False, weather=False, messages=False)
+        
+        # Build a map of existing drivers by driver_number for fast lookup
+        existing_drivers = {
+            d.driver_number: d 
+            for d in db.query(DriverModel).filter(DriverModel.year == year).all()
+        }
+        
+        updated_count = 0
+        inserted_count = 0
+        
+        # Process each driver from the session
+        for drv_code in session.drivers:
+            drv = session.get_driver(drv_code)
+            driver_number = str(drv["DriverNumber"])
+            team_name = drv["TeamName"]
+            team_color = f"#{drv['TeamColor']}" if drv["TeamColor"] else "#333333"
+            broadcast_name = drv["BroadcastName"]
+            full_name = drv["FullName"]
+            headshot_url = drv["HeadshotUrl"]
+            
+            if driver_number in existing_drivers:
+                # UPDATE: Driver exists, update their team info
+                existing_driver = existing_drivers[driver_number]
+                
+                changed = False
+                if existing_driver.team_name != team_name:
+                    existing_driver.team_name = team_name
+                    changed = True
+                if existing_driver.team_color != team_color:
+                    existing_driver.team_color = team_color
+                    changed = True
+                if existing_driver.broadcast_name != broadcast_name:
+                    existing_driver.broadcast_name = broadcast_name
+                    changed = True
+                if existing_driver.full_name != full_name:
+                    existing_driver.full_name = full_name
+                    changed = True
+                if existing_driver.headshot_url != headshot_url:
+                    existing_driver.headshot_url = headshot_url
+                    changed = True
+                
+                if changed:
+                    updated_count += 1
+            else:
+                # INSERT: New driver (mid-season replacement, rookie, etc.)
+                driver_entry = DriverModel(
+                    year=year,
+                    driver_number=driver_number,
+                    broadcast_name=broadcast_name,
+                    full_name=full_name,
+                    team_name=team_name,
+                    team_color=team_color,
+                    headshot_url=headshot_url,
+                )
+                db.add(driver_entry)
+                inserted_count += 1
+        
+        db.commit()
+        
+        total_count = db.query(DriverModel).filter(DriverModel.year == year).count()
+        
+        return {
+            "success": True,
+            "updated": updated_count,
+            "inserted": inserted_count,
+            "total": total_count,
+            "round": round_,
+        }
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        db.rollback()
+        return {"success": False, "error": str(e), "round": round_}
+
+
+def sync_drivers_for_year(year: int) -> Dict[str, Any]:
+    """
+    Sync driver roster for a year from the latest completed round.
+    
+    This is the main entry point for driver synchronization.
+    It identifies the latest round with results and syncs driver info from it.
+    
+    Args:
+        year: Season year to sync
+        
+    Returns:
+        Dict with sync results
+    """
+    enable_fastf1_cache()
     init_db()
-    cache_race_analysis(args.year, args.round_)
+    db = SessionLocal()
+    
+    try:
+        
+        # First, ensure we have race data for this year
+        if not db.query(RaceModel).filter(RaceModel.year == year).first():
+            print(f"[DRIVER_SYNC] No race data for {year}, fetching schedule...")
+            try:
+                schedule = fastf1.get_event_schedule(year)
+                for _, race in schedule.iterrows():
+                    if race["EventFormat"] == "testing":
+                        continue
+                    race_entry = RaceModel(
+                        year=year,
+                        round=race["RoundNumber"],
+                        event_name=race["EventName"],
+                        country=race["Country"],
+                        location=race["Location"],
+                        date=str(race["Session5Date"]),
+                        event_format=race["EventFormat"],
+                    )
+                    db.add(race_entry)
+                db.commit()
+            except Exception as e:
+                print(f"[DRIVER_SYNC] Warning: Could not fetch schedule: {e}")
+        
+        # Find the latest completed round
+        last_round = get_last_completed_round(year, db)
+        
+        if not last_round:
+            # No completed rounds, try round 1 for pre-season data
+            last_round = 1
+        
+        result = sync_drivers_from_session(year, last_round, db)
+        
+        if result.get("success"):
+            print(f"[DRIVER_SYNC] Complete: {result.get('updated', 0)} updated, {result.get('inserted', 0)} inserted, {result.get('total', 0)} total drivers")
+        else:
+            print(f"[DRIVER_SYNC] Failed: {result.get('error', 'Unknown error')}")
+        
+        return result
+        
+    finally:
+        db.close()
+
+
+def run_full_etl() -> None:
+    """
+    Run full ETL process for all recent years.
+    This includes race schedules, driver sync, and standings.
+    """
+    from app.services.f1_service import run_etl
+    run_etl()
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="PitWall ETL: Cache analysis data and sync driver rosters.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Cache analysis for a specific race
+  python server/etl.py --year 2024 --round 1
+
+  # Sync drivers from latest completed round (handles mid-season transfers)
+  python server/etl.py --sync-drivers --year 2025
+
+  # Run full ETL for all years
+  python server/etl.py --full
+        """
+    )
+    
+    # Analysis caching options
+    parser.add_argument("--year", type=int, help="Season year")
+    parser.add_argument("--round", type=int, dest="round_", help="Round number for analysis caching")
+    
+    # Driver sync option
+    parser.add_argument(
+        "--sync-drivers",
+        action="store_true",
+        help="Sync driver roster from latest completed round (requires --year)"
+    )
+    
+    # Full ETL option
+    parser.add_argument(
+        "--full",
+        action="store_true",
+        help="Run full ETL for all years (2020-2025)"
+    )
+    
+    args = parser.parse_args()
+    
+    init_db()
+    enable_fastf1_cache()
+    
+    if args.full:
+        # Run full ETL
+        run_full_etl()
+    elif args.sync_drivers:
+        # Sync drivers for a specific year
+        if not args.year:
+            parser.error("--sync-drivers requires --year")
+        result = sync_drivers_for_year(args.year)
+        if result.get("success"):
+            print(f"\nDriver sync successful!")
+            print(f"  Year: {args.year}")
+            print(f"  Round synced: {result.get('round')}")
+            print(f"  Updated: {result.get('updated', 0)}")
+            print(f"  Inserted: {result.get('inserted', 0)}")
+            print(f"  Total drivers: {result.get('total', 0)}")
+        else:
+            print(f"\nDriver sync failed: {result.get('error', 'Unknown error')}")
+            sys.exit(1)
+    elif args.year and args.round_:
+        # Cache analysis for specific race
+        cache_race_analysis(args.year, args.round_)
+    else:
+        parser.print_help()
+        sys.exit(1)
 
 
 if __name__ == "__main__":

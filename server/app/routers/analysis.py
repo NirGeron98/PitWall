@@ -138,7 +138,6 @@ def _fetch_or_compute_laps(year: int, round: int, db: Session) -> dict:
         return record.data
     
     # Cache miss: compute on-demand
-    print(f"[ANALYSIS] Computing laps data on-demand for {year} round {round}")
     compute_start = time.time()
     
     try:
@@ -155,11 +154,9 @@ def _fetch_or_compute_laps(year: int, round: int, db: Session) -> dict:
         db.commit()
         
         elapsed = (time.time() - compute_start) * 1000
-        print(f"[ANALYSIS] Computed and cached laps data in {elapsed:.2f}ms")
         
         return payload
     except Exception as e:
-        print(f"[ANALYSIS] Failed to compute laps data: {e}")
         # Return empty structure on error
         return {"laps": [], "drivers": []}
 
@@ -177,7 +174,6 @@ def _fetch_or_compute_telemetry(year: int, round: int, driver: str, db: Session)
         return record.data
     
     # Cache miss: compute on-demand
-    print(f"[ANALYSIS] Computing telemetry on-demand for {year} round {round} driver {driver}")
     compute_start = time.time()
     
     try:
@@ -194,11 +190,9 @@ def _fetch_or_compute_telemetry(year: int, round: int, driver: str, db: Session)
         db.commit()
         
         elapsed = (time.time() - compute_start) * 1000
-        print(f"[ANALYSIS] Computed and cached telemetry in {elapsed:.2f}ms")
         
         return payload
     except Exception as e:
-        print(f"[ANALYSIS] Failed to compute telemetry: {e}")
         return {"distance": [], "speed": [], "throttle": [], "brake": [], "gear": []}
 
 
@@ -232,7 +226,6 @@ def _fetch_or_compute_stints(year: int, round: int, driver: str, db: Session) ->
         db.commit()
         
         elapsed = (time.time() - compute_start) * 1000
-        print(f"[ANALYSIS] Computed and cached stints in {elapsed:.2f}ms")
         
         return payload
     except Exception as e:
