@@ -11,6 +11,8 @@ from app.services.f1_service import (
     hydrate_team_standings,
     persist_driver_standings,
     persist_team_standings,
+    sync_drivers_for_year,
+    get_last_completed_round,
 )
 
 
@@ -18,8 +20,29 @@ router = APIRouter(prefix="/api", tags=["drivers"])
 
 
 @router.get("/drivers")
-def get_drivers(year: int, db: Session = Depends(get_db)):
+def get_drivers(year: int, refresh: bool = False, db: Session = Depends(get_db)):
+    """
+    Get all drivers for a given season year.
+    
+    Args:
+        year: Season year
+        refresh: If True, force re-sync from latest completed round (useful for mid-season changes)
+        
+    Returns:
+        List of driver info with current team associations
+    """
+    # If refresh requested, sync from latest round
+    if refresh:
+        sync_drivers_for_year(year, db, force_refresh=True)
+    
+    # Return drivers from DB
     drivers = db.query(DriverModel).filter(DriverModel.year == year).all()
+    
+    # If no drivers found, try to sync
+    if not drivers:
+        sync_drivers_for_year(year, db, force_refresh=False)
+        drivers = db.query(DriverModel).filter(DriverModel.year == year).all()
+    
     return [
         {
             "DriverNumber": d.driver_number,
@@ -31,6 +54,27 @@ def get_drivers(year: int, db: Session = Depends(get_db)):
         }
         for d in drivers
     ]
+
+
+@router.post("/drivers/sync")
+def sync_drivers(year: int, db: Session = Depends(get_db)):
+    """
+    Force sync driver roster from the latest completed session.
+    Use this endpoint to update drivers after mid-season team changes.
+    
+    Returns:
+        Sync result with number of drivers updated and the round used
+    """
+    last_round = get_last_completed_round(year, db)
+    count = sync_drivers_for_year(year, db, force_refresh=True)
+    
+    return {
+        "success": count > 0,
+        "year": year,
+        "round_synced": last_round or 1,
+        "drivers_count": count,
+        "message": f"Synced {count} drivers from round {last_round or 1}"
+    }
 
 
 @router.get("/standings/drivers")

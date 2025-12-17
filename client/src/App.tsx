@@ -491,6 +491,21 @@ function AppShell() {
                     setCompareSelection([]);
                     setCompareStats({});
                   }}
+                  onAddDriver={toggleCompare}
+                  onRemoveDriver={(driverNum) => {
+                    setCompareSelection((prev) =>
+                      prev.filter((id) => id !== driverNum)
+                    );
+                    setCompareStats((prev) => {
+                      const updated = { ...prev };
+                      delete updated[driverNum];
+                      return updated;
+                    });
+                  }}
+                  allDrivers={drivers}
+                  selectedDriverNumbers={compareSelection}
+                  canAddMore={compareSelection.length < 3}
+                  maxDrivers={3}
                 />
               }
             />

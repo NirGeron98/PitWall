@@ -459,31 +459,11 @@ def process_year(year: int, db: Session) -> None:
             print(f"   Warning: Could not fetch schedule for {year}: {e}")
 
     # --- DRIVERS ---
+    # Fetch from latest completed round to reflect mid-season driver changes
     if db.query(DriverModel).filter(DriverModel.year == year).first():
         print(f"   Using existing drivers for {year}.")
     else:
-        try:
-            session = fastf1.get_session(year, 1, "R")
-            session.load(laps=False, telemetry=False, weather=False, messages=False)
-
-            count = 0
-            for drv_name in session.drivers:
-                drv = session.get_driver(drv_name)
-                driver_entry = DriverModel(
-                    year=year,
-                    driver_number=str(drv["DriverNumber"]),
-                    broadcast_name=drv["BroadcastName"],
-                    full_name=drv["FullName"],
-                    team_name=drv["TeamName"],
-                    team_color=f"#{drv['TeamColor']}" if drv["TeamColor"] else "#333333",
-                    headshot_url=drv["HeadshotUrl"],
-                )
-                db.add(driver_entry)
-                count += 1
-            db.commit()
-            print(f"   Added {count} drivers.")
-        except Exception as e:
-            print(f"   Warning: Could not fetch drivers for {year} (Season might not have started): {e}")
+        sync_drivers_for_year(year, db, force_refresh=False)
 
     # --- STANDINGS (Drivers/Teams) ---
     try:
@@ -594,6 +574,71 @@ def get_last_completed_round(year: int, db: Session) -> Optional[int]:
         except Exception:
             continue
     return last_round
+
+
+def sync_drivers_for_year(year: int, db: Session, force_refresh: bool = False) -> int:
+    """
+    Sync driver roster from the latest completed session for a given year.
+    This ensures mid-season driver changes (team swaps) are reflected.
+    
+    Args:
+        year: Season year to sync
+        db: Database session
+        force_refresh: If True, delete existing drivers and re-fetch from latest round
+        
+    Returns:
+        Number of drivers synced
+    """
+    enable_fastf1_cache()
+    
+    # Find the latest completed round
+    last_round = get_last_completed_round(year, db)
+    
+    # If no completed rounds, try round 1 (pre-season or early season)
+    target_round = last_round if last_round else 1
+    
+    print(f"[DRIVER_SYNC] Syncing drivers for {year} from round {target_round} (force_refresh={force_refresh})")
+    
+    # Check if we should skip (drivers exist and not forcing refresh)
+    existing_count = db.query(DriverModel).filter(DriverModel.year == year).count()
+    if existing_count > 0 and not force_refresh:
+        print(f"[DRIVER_SYNC] {existing_count} drivers already exist for {year}, skipping sync")
+        return existing_count
+    
+    try:
+        # Load session from target round
+        session = fastf1.get_session(year, target_round, "R")
+        session.load(laps=False, telemetry=False, weather=False, messages=False)
+        
+        # Delete existing drivers if force refresh
+        if force_refresh:
+            deleted = db.query(DriverModel).filter(DriverModel.year == year).delete()
+            print(f"[DRIVER_SYNC] Deleted {deleted} existing drivers for {year}")
+        
+        # Insert new drivers
+        count = 0
+        for drv_code in session.drivers:
+            drv = session.get_driver(drv_code)
+            driver_entry = DriverModel(
+                year=year,
+                driver_number=str(drv["DriverNumber"]),
+                broadcast_name=drv["BroadcastName"],
+                full_name=drv["FullName"],
+                team_name=drv["TeamName"],
+                team_color=f"#{drv['TeamColor']}" if drv["TeamColor"] else "#333333",
+                headshot_url=drv["HeadshotUrl"],
+            )
+            db.add(driver_entry)
+            count += 1
+        
+        db.commit()
+        print(f"[DRIVER_SYNC] Added {count} drivers for {year} (round {target_round})")
+        return count
+        
+    except Exception as e:
+        print(f"[DRIVER_SYNC] Warning: Could not sync drivers for {year}: {e}")
+        db.rollback()
+        return 0
 
 
 def prewarm_last_completed_race(year: int, db: Session) -> None:
