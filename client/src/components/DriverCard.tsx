@@ -1,7 +1,8 @@
 import React from 'react';
 import type { Driver } from '../types/f1';
-import { Star, User, Activity } from 'lucide-react';
+import { Star, Activity } from 'lucide-react';
 import { Card, CardHeader, CardBody, CardFooter } from './ui/Card';
+import { DriverAvatar } from './common/DriverAvatar';
 
 interface Props {
   driver: Driver;
@@ -64,17 +65,12 @@ export const DriverCard: React.FC<Props> = ({
 
       <CardBody className="flex-row items-center" style={{ gap: '16px' }}>
         <div style={{ position: 'relative' }}>
-          {driver.HeadshotUrl ? (
-            <img
-              src={driver.HeadshotUrl}
-              alt={driver.BroadcastName}
-              className="driver-avatar"
-            />
-          ) : (
-            <div className="driver-avatar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <User size={24} />
-            </div>
-          )}
+          <DriverAvatar
+            name={driver.BroadcastName}
+            url={driver.HeadshotUrl}
+            teamColor={driver.TeamColor}
+            className="driver-avatar"
+          />
           <div
             style={{
               height: '4px',

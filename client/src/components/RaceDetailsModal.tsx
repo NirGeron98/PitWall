@@ -3,6 +3,7 @@ import { X, Flag, Clock } from 'lucide-react';
 import type { RaceEvent, RaceResult } from '../types/f1';
 import { useData } from '../contexts/DataContext';
 import { getRaceResults } from '../services/api';
+import { DriverAvatar } from './common/DriverAvatar';
 
 interface Props {
     isOpen: boolean;
@@ -308,19 +309,12 @@ export const RaceDetailsModal: React.FC<Props> = ({ isOpen, onClose, race, onDri
                             >
                                 <div className="race-card-left">
                                     <div className={`race-pos ${posClass}`}>{positionLabel}</div>
-                                    {driverMeta?.HeadshotUrl ? (
-                                        <img
-                                            src={driverMeta.HeadshotUrl}
-                                            alt={res.BroadcastName}
-                                            className="race-driver-avatar"
-                                            style={{ borderColor: teamColor }}
-                                        />
-                                    ) : (
-                                        <div
-                                            className="race-driver-avatar"
-                                            style={{ borderColor: teamColor, background: '#333' }}
-                                        />
-                                    )}
+                                    <DriverAvatar
+                                        name={res.BroadcastName}
+                                        url={driverMeta?.HeadshotUrl}
+                                        teamColor={teamColor}
+                                        className="race-driver-avatar"
+                                    />
                                     <div className="race-driver-meta">
                                         <div className="race-driver-name">
                                             {res.BroadcastName}
