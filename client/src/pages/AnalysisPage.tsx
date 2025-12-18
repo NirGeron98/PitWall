@@ -15,7 +15,7 @@ import {
   Cell,
 } from "recharts";
 import { useData } from "../contexts/DataContext";
-import { getLapAnalysis } from "../services/api";
+import { getLapAnalysis, getRaceResults } from "../services/api";
 import type {
   DriverMeta,
   LapAnalysisResponse,
@@ -68,14 +68,58 @@ export const AnalysisPage: React.FC<Props> = () => {
     "You can view key numbers on mobile. For full analysis (graphs/diagrams), open this page on a larger screen.";
 
   // State and Context initialization
-  const { year, races, drivers, loading, fetchSessionResultsWithCache } =
-    useData();
+  const { year, races, drivers, loading } = useData();
   const [selectedRound, setSelectedRound] = useState<number | null>(null);
   const [selectedDrivers, setSelectedDrivers] = useState<string[]>([]);
   const [lapData, setLapData] = useState<LapPoint[]>([]);
   const [sessionDrivers, setSessionDrivers] = useState<DriverMeta[]>([]);
   const [busy, setBusy] = useState(false);
   const [raceResults, setRaceResults] = useState<RaceResult[]>([]);
+
+  const timeToMs = useCallback((timeStr: string | undefined | null) => {
+    if (!timeStr) return Number.MAX_SAFE_INTEGER;
+    const clean = String(timeStr).replace("0 days ", "");
+    // Supports mm:ss.mmm or ss.mmm
+    const parts = clean.split(":");
+    try {
+      if (parts.length === 2) {
+        const minutes = Number(parts[0]);
+        const [seconds, ms = "0"] = parts[1].split(".");
+        return (
+          minutes * 60000 +
+          Number(seconds) * 1000 +
+          Number(String(ms).padEnd(3, "0"))
+        );
+      }
+      if (parts.length === 1) {
+        const [seconds, ms = "0"] = parts[0].split(".");
+        return Number(seconds) * 1000 + Number(String(ms).padEnd(3, "0"));
+      }
+    } catch {
+      return Number.MAX_SAFE_INTEGER;
+    }
+    return Number.MAX_SAFE_INTEGER;
+  }, []);
+
+  const sortOfficialResults = useCallback(
+    (data: RaceResult[]) => {
+      const copy = [...(data || [])];
+      copy.sort((a, b) => {
+        const aPos = Number((a as any).Position);
+        const bPos = Number((b as any).Position);
+        const aPosValid = Number.isFinite(aPos) && aPos > 0;
+        const bPosValid = Number.isFinite(bPos) && bPos > 0;
+        if (aPosValid && bPosValid) return aPos - bPos;
+
+        // Fallback: sort by time string if position is missing
+        const aTime = timeToMs((a as any).Time);
+        const bTime = timeToMs((b as any).Time);
+        return aTime - bTime;
+      });
+      return copy;
+    },
+    [timeToMs]
+  );
 
   // Initialize defaults (first race)
   useEffect(() => {
@@ -84,28 +128,22 @@ export const AnalysisPage: React.FC<Props> = () => {
     }
   }, [races, selectedRound]);
 
-  // Fetch race results (classification) to backfill missing drivers
+  // Fetch official race classification (single source of truth for finishing order)
   useEffect(() => {
     const loadResults = async () => {
       if (!selectedRound) return;
-      // Guard: server may not have 2025 session-results yet; avoid noisy 400s
-      if (!year || year > 2024) {
-        setRaceResults([]);
-        return;
-      }
+      if (!year) return;
       try {
-        const results = await fetchSessionResultsWithCache(
-          selectedRound,
-          "race"
-        );
-        setRaceResults(results || []);
+        // Use the exact same endpoint as the Race Results modal.
+        const results = await getRaceResults(year, selectedRound);
+        setRaceResults(sortOfficialResults(results || []));
       } catch (err) {
         console.error("Race results fetch failed", err);
         setRaceResults([]);
       }
     };
     loadResults();
-  }, [year, selectedRound, fetchSessionResultsWithCache]);
+  }, [year, selectedRound, sortOfficialResults]);
 
   // Load lap data (fast operation)
   // Backend now computes on-demand, so we can try for any year
@@ -189,7 +227,21 @@ export const AnalysisPage: React.FC<Props> = () => {
     let overallBest = Number.POSITIVE_INFINITY;
     let overallBestDriver: string | null = null;
     let totalValidLaps = 0;
+    // IMPORTANT: Top-3 finishing order must come from the official classification,
+    // not per-lap positions (which change during the race and can cause duplicates).
     const podium: Record<number, { driver: string; lap: number }> = {};
+
+    // Populate podium from race classification when available.
+    // The `lap` field is kept for backwards compatibility; UI only uses `driver`.
+    if (raceResults.length) {
+      for (const row of raceResults) {
+        const pos = Number((row as any).Position);
+        if (!Number.isFinite(pos) || pos < 1 || pos > 3) continue;
+        const driverNumber = String((row as any).DriverNumber || "").trim();
+        if (!driverNumber) continue;
+        if (!podium[pos]) podium[pos] = { driver: driverNumber, lap: 0 };
+      }
+    }
 
     lapData.forEach((lp) => {
       if (!lp.driverNumber) return;
@@ -217,12 +269,7 @@ export const AnalysisPage: React.FC<Props> = () => {
           overallBest = lp.lapTimeMs;
           overallBestDriver = lp.driverNumber;
         }
-        const pos = lp.position;
-        if (pos && pos <= 3) {
-          if (!podium[pos] || lp.lapTimeMs < podium[pos].lap) {
-            podium[pos] = { driver: lp.driverNumber, lap: lp.lapTimeMs };
-          }
-        }
+        // Do not compute finishing order from lap position.
       }
     });
 
@@ -314,7 +361,7 @@ export const AnalysisPage: React.FC<Props> = () => {
       driversCount: Object.keys(driverStats).length,
       podium,
     };
-  }, [lapData]);
+  }, [lapData, raceResults]);
 
   // Lap comparison data
   const comparisonData = useMemo(() => {
