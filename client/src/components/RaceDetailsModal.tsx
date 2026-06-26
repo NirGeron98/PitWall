@@ -15,11 +15,36 @@ interface Props {
 
 type SessionCode = 'P1' | 'P2' | 'P3' | 'Q' | 'R';
 
+const SPRINT_FORMATS = ['sprint', 'sprint_shootout', 'sprint_qualifying'];
+
+const sessionLabel = (code: SessionCode): string =>
+    code === 'R' ? 'Race' : code === 'Q' ? 'Qualifying' : code;
+
+// Whether a session is part of this weekend's format. Sprint weekends run a
+// single practice (P1) instead of FP1/FP2/FP3, so P2/P3 do not exist for them.
+const sessionExistsForWeekend = (eventFormat: string | undefined, code: SessionCode): boolean => {
+    const isSprint = SPRINT_FORMATS.includes((eventFormat || '').toLowerCase());
+    if (isSprint && (code === 'P2' || code === 'P3')) return false;
+    return true;
+};
+
+// Centered message box reused for loading / empty / error states so a selected
+// tab never renders as a blank content area.
+const SessionStateBox: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+    <div
+        className="loader-box"
+        style={{ minHeight: '240px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px', textAlign: 'center', padding: '24px' }}
+    >
+        {children}
+    </div>
+);
+
 export const RaceDetailsModal: React.FC<Props> = ({ isOpen, onClose, race, onDriverClick }) => {
     const { year, fetchSessionResultsWithCache, drivers } = useData();
     const [results, setResults] = useState<RaceResult[]>([]);
     const [sessionStore, setSessionStore] = useState<Record<string, RaceResult[]>>({});
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(false);
     const [activeSession, setActiveSession] = useState<SessionCode>('R');
     const prevRaceRound = useRef<number | null>(null);
 
@@ -95,17 +120,24 @@ export const RaceDetailsModal: React.FC<Props> = ({ isOpen, onClose, race, onDri
         if (!race) return;
         const cacheKey = `${race.RoundNumber}-${sessionCode}`;
         const cachedResults = sessionStore[cacheKey];
-        setLoading(forceRefresh || !cachedResults);
+        setError(false);
+        // Show cached results instantly; otherwise clear stale data from the
+        // previous tab so the loader/empty-state shows instead of wrong results.
+        if (!forceRefresh && cachedResults) {
+            setResults(cachedResults);
+            setLoading(forceRefresh);
+        } else {
+            setResults([]);
+            setLoading(true);
+        }
         try {
-            // Instant switch if cached locally
-            if (!forceRefresh && cachedResults) {
-                setResults(cachedResults);
-            }
             const sorted = await loadSession(sessionCode, forceRefresh);
             setResults(sorted);
             setLastUpdated(new Date());
         } catch (err) {
-            console.error(err);
+            console.error(`[RaceModal] Failed to load ${sessionCode} for round ${race.RoundNumber}`, err);
+            setResults([]);
+            setError(true);
         } finally {
             setLoading(false);
         }
@@ -126,6 +158,7 @@ export const RaceDetailsModal: React.FC<Props> = ({ isOpen, onClose, race, onDri
 
             // 1. Load Active Session (Race) Immediately
             (async () => {
+                setError(false);
                 setLoading(true);
                 try {
                     const raceData = await loadSession('R', false);
@@ -133,6 +166,8 @@ export const RaceDetailsModal: React.FC<Props> = ({ isOpen, onClose, race, onDri
                     setLastUpdated(new Date());
                 } catch (e) {
                     console.error("Failed to load initial race data", e);
+                    setResults([]);
+                    setError(true);
                 } finally {
                     setLoading(false);
                 }
@@ -244,10 +279,45 @@ export const RaceDetailsModal: React.FC<Props> = ({ isOpen, onClose, race, onDri
                         </div>
 
                         {loading && results.length === 0 ? (
-                            <div className="loader-box" style={{ height: '300px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px' }}>
+                            <SessionStateBox>
                                 <Flag className="animate-pulse" size={48} color="var(--accent-red)" />
                                 <p className="text-secondary">Loading Official Results...</p>
-                            </div>
+                            </SessionStateBox>
+                        ) : error ? (
+                            <SessionStateBox>
+                                <p style={{ fontWeight: 600 }}>Couldn’t load {sessionLabel(activeSession)} results.</p>
+                                <p className="text-secondary" style={{ fontSize: '0.85rem' }}>
+                                    Something went wrong while contacting the server.
+                                </p>
+                                <button className="btn-tab active" onClick={() => fetchData(activeSession, true)}>
+                                    Retry
+                                </button>
+                            </SessionStateBox>
+                        ) : results.length === 0 ? (
+                            <SessionStateBox>
+                                {sessionExistsForWeekend(race.EventFormat, activeSession) ? (
+                                    <>
+                                        <p style={{ fontWeight: 600 }}>
+                                            {sessionLabel(activeSession)} results are not available yet.
+                                        </p>
+                                        <p className="text-secondary" style={{ fontSize: '0.85rem' }}>
+                                            Timing data for this session hasn’t been published. Please try again later.
+                                        </p>
+                                        <button className="btn-tab" onClick={() => fetchData(activeSession, true)}>
+                                            Refresh
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <p style={{ fontWeight: 600 }}>
+                                            No {sessionLabel(activeSession)} results are available for this race weekend.
+                                        </p>
+                                        <p className="text-secondary" style={{ fontSize: '0.85rem' }}>
+                                            This session was not part of the weekend format.
+                                        </p>
+                                    </>
+                                )}
+                            </SessionStateBox>
                         ) : (
                             <div className="race-results-stack">
                                 {results.map((res) => {

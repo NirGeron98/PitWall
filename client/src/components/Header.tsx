@@ -100,12 +100,9 @@ export const Header: React.FC<Props> = ({ year, onYearChange, userEmail, navItem
                   fontWeight: 700,
                 }}
               >
-                <option value={2020}>2020</option>
-                <option value={2021}>2021</option>
-                <option value={2022}>2022</option>
-                <option value={2023}>2023</option>
-                <option value={2024}>2024</option>
-                <option value={2025}>2025</option>
+                {Array.from({ length: Math.max(new Date().getFullYear(), 2025) - 2019 }, (_, i) => 2020 + i).map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
               </select>
               <Calendar
                 size={14}

@@ -31,15 +31,15 @@ export const getTelemetry = async (year: number, round: number, driverNumber: st
 };
 
 export const getRaceResults = async (year: number, round: number): Promise<RaceResult[]> => {
-    const res = await api.get(`/api/race-results`, { 
-        params: { year, round } 
+    const res = await api.get(`/api/race-results`, {
+        params: { year, round }
     });
     return res.data;
 };
 
 export const getSessionResults = async (year: number, round: number, session: string, refresh = false): Promise<RaceResult[]> => {
-    const res = await api.get(`/api/session-results`, { 
-        params: { year, round, session, refresh } 
+    const res = await api.get(`/api/session-results`, {
+        params: { year, round, session, refresh }
     });
     return res.data;
 };
@@ -52,6 +52,21 @@ export const getDriverStandings = async (year: number): Promise<DriverStanding[]
 export const getTeamStandings = async (year: number): Promise<TeamStanding[]> => {
     const res = await api.get(`/api/standings/teams`, { params: { year } });
     return res.data;
+};
+
+export interface SeasonResponse {
+    races: RaceEvent[];
+    drivers: Driver[];
+    driverStandings: DriverStanding[];
+    teamStandings: TeamStanding[];
+}
+
+export const getSeason = async (year: number): Promise<SeasonResponse> => {
+    const res = await api.get(`/api/season`, { params: { year } });
+    return {
+        ...res.data,
+        races: res.data.races.filter((r: RaceEvent) => r.RoundNumber > 0),
+    };
 };
 
 export const getDriverStats = async (year: number, driverNumber: string): Promise<DriverSeasonStats> => {

@@ -81,32 +81,19 @@ def sync_drivers(year: int, db: Session = Depends(get_db)):
 
 
 @router.get("/standings/drivers")
-def get_driver_standings(year: int, db: Session = Depends(get_db)):
+def get_driver_standings(year: int, refresh: bool = False, db: Session = Depends(get_db)):
     try:
+        cached = db.query(DriverStandingModel).filter(DriverStandingModel.year == year).all()
+        if cached and not refresh:
+            return serialize_driver_standings(cached)
+
         records = hydrate_driver_standings(year, db)
         if records:
             persist_driver_standings(year, records, db)
             return records
 
-        cached = db.query(DriverStandingModel).filter(DriverStandingModel.year == year).all()
         if cached:
-            return [
-                {
-                    "position": c.position,
-                    "points": float(c.points) if str(c.points).replace(".", "", 1).isdigit() else c.points,
-                    "wins": c.wins,
-                    "driverId": c.driver_id,
-                    "driverNumber": c.driver_number,
-                    "givenName": c.given_name,
-                    "familyName": c.family_name,
-                    "constructorName": c.constructor_name,
-                    "headshotUrl": c.headshot_url,
-                    "teamColor": c.team_color,
-                    "broadcastName": c.broadcast_name,
-                    "teamName": c.team_name,
-                }
-                for c in cached
-            ]
+            return serialize_driver_standings(cached)
 
         return []
     except Exception as e:
@@ -115,26 +102,19 @@ def get_driver_standings(year: int, db: Session = Depends(get_db)):
 
 
 @router.get("/standings/teams")
-def get_team_standings(year: int, db: Session = Depends(get_db)):
+def get_team_standings(year: int, refresh: bool = False, db: Session = Depends(get_db)):
     try:
+        cached = db.query(TeamStandingModel).filter(TeamStandingModel.year == year).all()
+        if cached and not refresh:
+            return serialize_team_standings(cached)
+
         records = hydrate_team_standings(year)
         if records:
             persist_team_standings(year, records, db)
             return records
 
-        cached = db.query(TeamStandingModel).filter(TeamStandingModel.year == year).all()
         if cached:
-            return [
-                {
-                    "position": c.position,
-                    "points": float(c.points) if str(c.points).replace(".", "", 1).isdigit() else c.points,
-                    "wins": c.wins,
-                    "constructorId": c.constructor_id,
-                    "constructorName": c.constructor_name,
-                    "nationality": c.nationality,
-                }
-                for c in cached
-            ]
+            return serialize_team_standings(cached)
 
         return []
     except Exception as e:
@@ -145,3 +125,37 @@ def get_team_standings(year: int, db: Session = Depends(get_db)):
 @router.get("/driver/{driver_number}/stats")
 def get_driver_stats(year: int, driver_number: str, db: Session = Depends(get_db)):
     return get_driver_stats_from_jolpica(year, driver_number, db)
+
+
+def serialize_driver_standings(cached):
+    return [
+        {
+            "position": c.position,
+            "points": float(c.points) if str(c.points).replace(".", "", 1).isdigit() else c.points,
+            "wins": c.wins,
+            "driverId": c.driver_id,
+            "driverNumber": c.driver_number,
+            "givenName": c.given_name,
+            "familyName": c.family_name,
+            "constructorName": c.constructor_name,
+            "headshotUrl": c.headshot_url,
+            "teamColor": c.team_color,
+            "broadcastName": c.broadcast_name,
+            "teamName": c.team_name,
+        }
+        for c in sorted(cached, key=lambda item: item.position or 999)
+    ]
+
+
+def serialize_team_standings(cached):
+    return [
+        {
+            "position": c.position,
+            "points": float(c.points) if str(c.points).replace(".", "", 1).isdigit() else c.points,
+            "wins": c.wins,
+            "constructorId": c.constructor_id,
+            "constructorName": c.constructor_name,
+            "nationality": c.nationality,
+        }
+        for c in sorted(cached, key=lambda item: item.position or 999)
+    ]

@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: pitwall-api
+    runtime: python
+    rootDir: server
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    plan: free
+    envVars:
+      - key: FASTF1_CACHE_DIR
+        value: /tmp/fastf1-cache
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "10080"
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: ADMIN_SYNC_SECRET
+        sync: false

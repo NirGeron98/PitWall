@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
-import { getRaces, getDrivers, getDriverStandings, getTeamStandings, getDriverStats, getSessionResults } from '../services/api';
+import { getRaces, getSeason, getDriverStats, getSessionResults } from '../services/api';
 import type { RaceEvent, Driver, DriverStanding, TeamStanding, DriverSeasonStats, RaceResult } from '../types/f1';
 import { useAuth } from './AuthContext';
 
@@ -55,7 +55,7 @@ interface DataProviderProps {
 
 const getDefaultSeasonYear = (): number => {
   const yr = new Date().getFullYear();
-  return Number.isFinite(yr) && yr >= 1950 ? yr : 2025;
+  return Number.isFinite(yr) && yr >= 1950 ? yr : 2026;
 };
 
 export const DataProvider: React.FC<DataProviderProps> = ({ children, initialYear = getDefaultSeasonYear() }) => {
@@ -90,26 +90,9 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, initialYea
   };
 
   const fetchSeason = async (targetYear: number): Promise<SeasonBundle> => {
-    const racesPromise = racesCache[targetYear]
-      ? Promise.resolve(racesCache[targetYear])
-      : getRaces(targetYear).then((data) => {
-          setRacesCache((prev) => ({ ...prev, [targetYear]: data }));
-          return data;
-        });
-
-    const [racesData, driversData, driverStandingsData, teamStandingsData] = await Promise.all([
-      racesPromise,
-      getDrivers(targetYear),
-      getDriverStandings(targetYear),
-      getTeamStandings(targetYear),
-    ]);
-
-    return {
-      races: racesData,
-      drivers: driversData,
-      driverStandings: driverStandingsData,
-      teamStandings: teamStandingsData,
-    };
+    const bundle = await getSeason(targetYear);
+    setRacesCache((prev) => ({ ...prev, [targetYear]: bundle.races }));
+    return bundle;
   };
 
   const prefetchRacesForYear = (targetYear: number = year) => {
@@ -221,7 +204,9 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, initialYea
       delete copy[year];
       return copy;
     });
-    await ensureSeason(year, true);
+    const bundle = await fetchSeason(year);
+    setSeasonCache((prev) => ({ ...prev, [year]: bundle }));
+    applySeasonToState(bundle);
   };
 
   const primeSeasons = async (years: number[]) => {

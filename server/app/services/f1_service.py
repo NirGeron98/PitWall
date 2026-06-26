@@ -13,7 +13,9 @@ from fastapi import HTTPException
 from fastf1.ergast import Ergast
 from sqlalchemy.orm import Session
 
-from app.core.config import CACHE_DIR
+import time
+
+from app.core.config import CACHE_DIR, LIVE_SESSION_TTL_SECONDS, LIVE_WINDOW_DAYS
 from app.database import SessionLocal, init_db
 from app.models import (
     AppCacheModel,
@@ -141,6 +143,14 @@ def _persist_team_standings(year: int, records: list, db: Session) -> None:
 
 # --- HELPERS FOR SESSION RESULTS ---
 
+def _log_session_timing(year, round, session_code, *, cache, source, load, db, total, rows):
+    """One structured line per session load to confirm where time is spent."""
+    print(
+        f"[SESSION] {year}/{round}/{session_code} cache={cache} source={source} "
+        f"load={load:.2f}s db={db * 1000:.1f}ms total={total:.2f}s rows={rows}"
+    )
+
+
 def _fmt_td(td):
     if td is None:
         return None
@@ -183,11 +193,59 @@ def _serialize_cached_results(cached):
     ]
 
 
-def _load_session_results(year: int, round: int, session_code: str, refresh: bool, db: Session):
-    """Centralized loader that keeps DB cache in sync with FastF1.
+def _cache_is_stale(cached, ttl_seconds: int) -> bool:
+    """True if the freshest cached row is older than ttl_seconds (or has no timestamp)."""
+    newest = None
+    for row in cached:
+        ts = getattr(row, "fetched_at", None)
+        if ts is None:
+            return True
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        if newest is None or ts > newest:
+            newest = ts
+    if newest is None:
+        return True
+    age = (datetime.now(timezone.utc) - newest).total_seconds()
+    return age > ttl_seconds
 
-    For completed events we always refresh from FastF1 to avoid stale pre-race data.
+
+def _best_lap_times_by_driver(laps) -> dict:
+    """Vectorized fastest-lap-per-driver, replacing a per-driver pick loop.
+
+    Returns {driver_number: formatted_time}. Empty dict on any problem.
     """
+    try:
+        if laps is None or laps.empty or "LapTime" not in laps.columns:
+            return {}
+        valid = laps[laps["LapTime"].notna()]
+        if valid.empty:
+            return {}
+        fastest = valid.groupby("DriverNumber")["LapTime"].min()
+        return {str(num): _fmt_td(lap) for num, lap in fastest.items()}
+    except Exception:
+        return {}
+
+
+def _load_session_results(
+    year: int,
+    round: int,
+    session_code: str,
+    refresh: bool,
+    db: Session,
+    force: bool = False,
+):
+    """Centralized loader that keeps the DB cache in sync with FastF1.
+
+    Cache policy:
+    - Completed events outside the live window are immutable: always served from
+      the DB cache, ignoring a client ``refresh`` (only an admin ``force`` reloads).
+    - Inside the live window (+/- LIVE_WINDOW_DAYS) we serve cached rows but
+      revalidate from FastF1 when they are older than LIVE_SESSION_TTL_SECONDS or
+      ``refresh`` is requested.
+    """
+
+    req_start = time.perf_counter()
 
     session_map = {"P1": "FP1", "P2": "FP2", "P3": "FP3", "Q": "Q", "S": "S", "R": "R"}
     f1_session_code = session_map.get(session_code)
@@ -202,40 +260,64 @@ def _load_session_results(year: int, round: int, session_code: str, refresh: boo
         if race and race.date:
             race_date = datetime.fromisoformat(str(race.date)).date()
             today = datetime.now(timezone.utc).date()
-            if abs((race_date - today).days) <= 4:
+            if abs((race_date - today).days) <= LIVE_WINDOW_DAYS:
                 live_window = True
             if today > race_date:
                 event_finished = True
     except Exception as e:
         print(f"Could not determine live window: {e}")
 
-    # Prefer cached data whenever refresh is False. This avoids reloading FastF1 for finished events.
-    if not refresh:
-        cached = (
-            db.query(SessionResultModel)
-            .filter(
-                SessionResultModel.year == year,
-                SessionResultModel.round == round,
-                SessionResultModel.session_code == session_code,
-            )
-            .order_by(SessionResultModel.position)
-            .all()
+    db_start = time.perf_counter()
+    cached = (
+        db.query(SessionResultModel)
+        .filter(
+            SessionResultModel.year == year,
+            SessionResultModel.round == round,
+            SessionResultModel.session_code == session_code,
         )
-        if cached:
-            return _serialize_cached_results(cached)
+        .order_by(SessionResultModel.position)
+        .all()
+    )
+    db_elapsed = time.perf_counter() - db_start
+
+    # Decide whether the cache can be served without hitting FastF1.
+    serve_cache = False
+    if cached and not force:
+        if live_window:
+            # Stale-while-revalidate: serve cache unless explicitly refreshing or stale.
+            serve_cache = not refresh and not _cache_is_stale(cached, LIVE_SESSION_TTL_SECONDS)
+        else:
+            # Completed/immutable (or pre-event placeholder): cache is authoritative.
+            serve_cache = True
+
+    if serve_cache:
+        _log_session_timing(
+            year, round, session_code, cache="hit", source="db",
+            load=0.0, db=db_elapsed, total=time.perf_counter() - req_start, rows=len(cached),
+        )
+        return _serialize_cached_results(cached)
 
     # Fetch fresh data from FastF1
     try:
+        load_start = time.perf_counter()
         try:
             sess = fastf1.get_session(year, round, f1_session_code)
-        except ValueError as ve:
+        except ValueError:
             return []
-        except Exception as e:
+        except Exception:
             raise
 
         sess.load(laps=True, telemetry=False, weather=False, messages=False)
+        load_elapsed = time.perf_counter() - load_start
         results = sess.results.fillna("")
-        laps = sess.laps
+        # sess.laps raises DataNotLoadedError when a session has no timing data yet
+        # (e.g. a just-scheduled round). Resolve it safely before use so such
+        # sessions degrade to "no best laps" instead of failing the whole load.
+        try:
+            session_laps = sess.laps
+        except Exception:
+            session_laps = None
+        best_times = _best_lap_times_by_driver(session_laps)
 
         db.query(SessionResultModel).filter(
             SessionResultModel.year == year,
@@ -243,6 +325,7 @@ def _load_session_results(year: int, round: int, session_code: str, refresh: boo
             SessionResultModel.session_code == session_code,
         ).delete()
 
+        now = datetime.now(timezone.utc)
         output = []
         for _, row in results.iterrows():
             driver_no = str(row.get("DriverNumber", ""))
@@ -253,16 +336,7 @@ def _load_session_results(year: int, round: int, session_code: str, refresh: boo
             except Exception:
                 position = str(pos_val)
 
-            best_time = None
-            try:
-                drv_laps = laps.pick_drivers(driver_no)
-                if not drv_laps.empty:
-                    best_lap = drv_laps.pick_fastest()
-                    if best_lap is not None and "LapTime" in best_lap:
-                        best_time = _fmt_td(best_lap["LapTime"])
-            except Exception:
-                best_time = None
-
+            best_time = best_times.get(driver_no)
             time_val = _fmt_td(row.get("Time", None)) or best_time or ""
 
             status = row.get("Status", "")
@@ -294,25 +368,26 @@ def _load_session_results(year: int, round: int, session_code: str, refresh: boo
                     time=record["Time"],
                     status=record["Status"],
                     points=record["Points"],
+                    fetched_at=now,
                 )
             )
 
         db.commit()
+        _log_session_timing(
+            year, round, session_code, cache="miss", source="fastf1",
+            load=load_elapsed, db=db_elapsed, total=time.perf_counter() - req_start, rows=len(output),
+        )
         return output
 
     except Exception as e:
         traceback.print_exc()
-        cached = (
-            db.query(SessionResultModel)
-            .filter(
-                SessionResultModel.year == year,
-                SessionResultModel.round == round,
-                SessionResultModel.session_code == session_code,
-            )
-            .order_by(SessionResultModel.position)
-            .all()
-        )
+        # Fall back to whatever we already have cached so a transient FastF1
+        # failure never blanks out a known-good session.
         if cached:
+            _log_session_timing(
+                year, round, session_code, cache="hit", source="db-fallback",
+                load=0.0, db=db_elapsed, total=time.perf_counter() - req_start, rows=len(cached),
+            )
             return _serialize_cached_results(cached)
 
         raise HTTPException(status_code=500, detail=str(e))
@@ -520,10 +595,15 @@ def run_etl() -> None:
     init_db()
     db = SessionLocal()
 
-    years_to_process = [2020, 2021, 2022, 2023, 2024, 2025]
+    current_year = datetime.now(timezone.utc).year
+    years_to_process = list(range(2020, current_year + 1))
 
     for year in years_to_process:
         process_year(year, db)
+
+    # Warm every completed session into the DB cache so race modal opens are
+    # served from the DB instead of cold-loading FastF1 on first click.
+    warm_all_completed_sessions_all_years(db, start_year=2020)
 
     db.close()
 
@@ -593,12 +673,29 @@ def sync_drivers_for_year(year: int, db: Session, force_refresh: bool = False) -
     existing_count = db.query(DriverModel).filter(DriverModel.year == year).count()
     if existing_count > 0 and not force_refresh:
         return {"updated": 0, "inserted": 0, "total": existing_count, "round": target_round, "skipped": True}
-    
+
     try:
-        # Load session from target round
-        session = fastf1.get_session(year, target_round, "R")
-        session.load(laps=False, telemetry=False, weather=False, messages=False)
-        
+        # Find a round that actually has driver data. The latest completed round may
+        # have no published data yet (FastF1/Ergast lag for recent races), so fall
+        # back through earlier rounds until one returns a non-empty driver list.
+        session = None
+        candidate_rounds = list(range(target_round, 0, -1))
+        for candidate in candidate_rounds:
+            try:
+                candidate_session = fastf1.get_session(year, candidate, "R")
+                candidate_session.load(laps=False, telemetry=False, weather=False, messages=False)
+                if len(candidate_session.drivers) > 0:
+                    session = candidate_session
+                    target_round = candidate
+                    break
+            except Exception as load_err:
+                print(f"[DRIVER_SYNC] {year} round {candidate} unavailable: {load_err}")
+                continue
+
+        if session is None:
+            return {"updated": 0, "inserted": 0, "total": existing_count, "round": target_round,
+                    "error": "no round with driver data"}
+
         # Build a map of existing drivers by driver_number for fast lookup
         existing_drivers = {
             d.driver_number: d 
@@ -687,6 +784,76 @@ def prewarm_last_completed_race(year: int, db: Session) -> None:
         _load_session_results(year, last_round, "R", refresh=False, db=db)
     except Exception as e:  # pragma: no cover - best effort prewarm
         print(f"[PREWARM] Failed to cache {year} round {last_round}: {e}")
+
+
+def _sessions_for_format(event_format: str | None) -> list[str]:
+    """Session codes that exist for a given FastF1 event format.
+
+    Sprint weekends run a single practice; conventional weekends run three.
+    """
+    fmt = (event_format or "").lower()
+    if "sprint" in fmt:
+        # FP1, Sprint Qualifying(->Q tab handled as Q), Sprint, Qualifying, Race.
+        # We expose: one practice, Sprint, Qualifying, Race.
+        return ["P1", "S", "Q", "R"]
+    return ["P1", "P2", "P3", "Q", "R"]
+
+
+def warm_all_completed_sessions(year: int, db: Session) -> dict:
+    """Pre-populate session_results for every session of every completed round.
+
+    Idempotent: sessions already cached (and fresh) are skipped, so re-running is
+    cheap and makes no FastF1 calls. Per-session errors are swallowed so one bad
+    session never aborts the batch. Returns a small summary for logging.
+    """
+    enable_fastf1_cache()
+
+    last_round = get_last_completed_round(year, db)
+    if not last_round:
+        print(f"[WARM] {year}: no completed rounds yet, nothing to warm.")
+        return {"year": year, "warmed": 0, "skipped": 0, "errors": 0}
+
+    races = (
+        db.query(RaceModel)
+        .filter(RaceModel.year == year, RaceModel.round <= last_round)
+        .order_by(RaceModel.round.asc())
+        .all()
+    )
+
+    warmed = skipped = errors = 0
+    for race in races:
+        for session_code in _sessions_for_format(race.event_format):
+            existing = (
+                db.query(SessionResultModel)
+                .filter(
+                    SessionResultModel.year == year,
+                    SessionResultModel.round == race.round,
+                    SessionResultModel.session_code == session_code,
+                )
+                .first()
+            )
+            if existing:
+                skipped += 1
+                continue
+            try:
+                _load_session_results(year, race.round, session_code, refresh=False, db=db)
+                warmed += 1
+            except Exception as e:  # pragma: no cover - best effort warming
+                errors += 1
+                print(f"[WARM] Failed {year} R{race.round} {session_code}: {e}")
+
+    summary = {"year": year, "warmed": warmed, "skipped": skipped, "errors": errors}
+    print(f"[WARM] {year} complete: {summary}")
+    return summary
+
+
+def warm_all_completed_sessions_all_years(db: Session, start_year: int = 2020) -> list[dict]:
+    """Warm every completed session across all seasons (2020 -> current)."""
+    current_year = datetime.now(timezone.utc).year
+    return [
+        warm_all_completed_sessions(year, db)
+        for year in range(start_year, current_year + 1)
+    ]
 
 
 def cache_races_snapshot(year: int, db: Session) -> list[dict]:

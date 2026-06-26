@@ -25,6 +25,7 @@ _load_local_env()
 JWT_SECRET: str = os.getenv("JWT_SECRET", "pitwall-dev-secret-key")
 JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", str(60 * 24 * 7)))
+ADMIN_SYNC_SECRET: str | None = os.getenv("ADMIN_SYNC_SECRET")
 
 
 # --- CORS ---
@@ -44,6 +45,8 @@ def cors_allow_origins() -> List[str]:
     return [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
         "https://pit-wall.vercel.app",
     ]
 
@@ -74,3 +77,14 @@ CACHE_DIR: str = os.getenv("FASTF1_CACHE_DIR") or _default_cache_dir()
 
 # --- Database ---
 DATABASE_URL: str | None = os.getenv("DATABASE_URL")
+
+
+# --- Session result caching ---
+# A weekend is considered "live" (results may still change) when the race date is
+# within +/- LIVE_WINDOW_DAYS of today. Outside this window a completed session is
+# treated as immutable and always served from the DB cache.
+LIVE_WINDOW_DAYS: int = int(os.getenv("LIVE_WINDOW_DAYS", "4"))
+
+# Inside the live window, cached session rows older than this TTL trigger a
+# stale-while-revalidate refresh from FastF1 (cached rows are still returned first).
+LIVE_SESSION_TTL_SECONDS: int = int(os.getenv("LIVE_SESSION_TTL_SECONDS", "120"))

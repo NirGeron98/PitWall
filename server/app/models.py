@@ -23,6 +23,7 @@ class RaceModel(Base):
         # Composite index for the common query pattern: filter by year, order by round
         # This makes queries like "WHERE year = X ORDER BY round" very fast
         Index("idx_races_year_round", "year", "round"),
+        UniqueConstraint("year", "round", name="uq_races_year_round"),
     )
 
 
@@ -37,6 +38,10 @@ class DriverModel(Base):
     team_name = Column(String)
     team_color = Column(String)
     headshot_url = Column(String, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("year", "driver_number", name="uq_drivers_year_number"),
+    )
 
 
 class DriverStandingModel(Base):
@@ -57,6 +62,10 @@ class DriverStandingModel(Base):
     broadcast_name = Column(String, nullable=True)
     team_name = Column(String, nullable=True)
 
+    __table_args__ = (
+        UniqueConstraint("year", "driver_id", name="uq_driver_standings_year_driver"),
+    )
+
 
 class TeamStandingModel(Base):
     __tablename__ = "team_standings"
@@ -69,6 +78,10 @@ class TeamStandingModel(Base):
     constructor_id = Column(String, index=True)
     constructor_name = Column(String)
     nationality = Column(String, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("year", "constructor_id", name="uq_team_standings_year_constructor"),
+    )
 
 
 class SessionResultModel(Base):
@@ -85,6 +98,14 @@ class SessionResultModel(Base):
     time = Column(String)
     status = Column(String)
     points = Column(Integer)
+    # When these rows were last fetched from FastF1. Drives stale-while-revalidate
+    # inside the live weekend window and lets warming skip already-fresh sessions.
+    fetched_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("year", "round", "session_code", "driver_number", name="uq_session_results_driver"),
+        Index("idx_session_results_lookup", "year", "round", "session_code"),
+    )
 
 
 class UserModel(Base):

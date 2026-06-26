@@ -595,15 +595,37 @@ Examples:
     parser.add_argument(
         "--full",
         action="store_true",
-        help="Run full ETL for all years (2020-2025)"
+        help="Run full ETL for all years (2020-current)"
     )
-    
+
+    # Warm session_results cache (all sessions of all completed rounds)
+    parser.add_argument(
+        "--warm",
+        action="store_true",
+        help="Warm session_results for completed rounds. Use --year for one season, otherwise all years."
+    )
+
     args = parser.parse_args()
-    
+
     init_db()
     enable_fastf1_cache()
-    
-    if args.full:
+
+    if args.warm:
+        from app.services.f1_service import (
+            warm_all_completed_sessions,
+            warm_all_completed_sessions_all_years,
+        )
+        db = SessionLocal()
+        try:
+            if args.year:
+                summary = warm_all_completed_sessions(args.year, db)
+                print(f"\nWarm complete: {summary}")
+            else:
+                summaries = warm_all_completed_sessions_all_years(db)
+                print(f"\nWarm complete for all years: {summaries}")
+        finally:
+            db.close()
+    elif args.full:
         # Run full ETL
         run_full_etl()
     elif args.sync_drivers:
