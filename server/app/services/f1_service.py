@@ -528,41 +528,61 @@ def process_year(year: int, db: Session) -> None:
 
 
     # --- RACES ---
-    if db.query(RaceModel).filter(RaceModel.year == year).first():
-        print(f"   Using existing races for {year}.")
-    else:
+    def _safe_date(val) -> str | None:
         try:
-            schedule = fastf1.get_event_schedule(year)
-            count = 0
-            for _, race in schedule.iterrows():
-                if race["EventFormat"] == "testing":
-                    continue
+            return str(val) if val is not None and str(val) not in ("None", "NaT") else None
+        except Exception:
+            return None
 
-                def _safe_date(val) -> str | None:
-                    try:
-                        return str(val) if val is not None and str(val) != "NaT" else None
-                    except Exception:
-                        return None
-
+    try:
+        schedule = fastf1.get_event_schedule(year)
+        existing_rounds = {
+            r.round for r in db.query(RaceModel).filter(RaceModel.year == year).all()
+        }
+        count = inserted = updated = 0
+        for _, race in schedule.iterrows():
+            if race["EventFormat"] == "testing":
+                continue
+            rnd = race["RoundNumber"]
+            s1 = _safe_date(race.get("Session1Date"))
+            s2 = _safe_date(race.get("Session2Date"))
+            s3 = _safe_date(race.get("Session3Date"))
+            s4 = _safe_date(race.get("Session4Date"))
+            s5 = _safe_date(race.get("Session5Date"))
+            if rnd in existing_rounds:
+                # Backfill session dates on existing rows (added in a later migration).
+                existing = db.query(RaceModel).filter(
+                    RaceModel.year == year, RaceModel.round == rnd
+                ).first()
+                if existing and not existing.session1_date:
+                    existing.session1_date = s1
+                    existing.session2_date = s2
+                    existing.session3_date = s3
+                    existing.session4_date = s4
+                    existing.session5_date = s5
+                    updated += 1
+            else:
                 race_entry = RaceModel(
                     year=year,
-                    round=race["RoundNumber"],
+                    round=rnd,
                     event_name=race["EventName"],
                     country=race["Country"],
                     location=race["Location"],
                     date=str(race["Session5Date"]),
                     event_format=race["EventFormat"],
-                    session1_date=_safe_date(race.get("Session1Date")),
-                    session2_date=_safe_date(race.get("Session2Date")),
-                    session3_date=_safe_date(race.get("Session3Date")),
-                    session4_date=_safe_date(race.get("Session4Date")),
-                    session5_date=_safe_date(race.get("Session5Date")),
+                    session1_date=s1,
+                    session2_date=s2,
+                    session3_date=s3,
+                    session4_date=s4,
+                    session5_date=s5,
                 )
                 db.add(race_entry)
-                count += 1
-            db.commit()
-        except Exception as e:
-            print(f"   Warning: Could not fetch schedule for {year}: {e}")
+                inserted += 1
+            count += 1
+        db.commit()
+        print(f"   Races {year}: {inserted} inserted, {updated} session-dates backfilled, {count} total.")
+    except Exception as e:
+        print(f"   Warning: Could not fetch schedule for {year}: {e}")
 
     # --- DRIVERS ---
     # Always sync from latest completed round to reflect mid-season driver changes
