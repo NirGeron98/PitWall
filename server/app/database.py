@@ -74,19 +74,19 @@ def _run_lightweight_migrations() -> None:
     """
 
     # Postgres supports IF NOT EXISTS; SQLite does not, so guard via PRAGMA.
-    try:
-        with engine.begin() as conn:
-            if _is_sqlite:
-                cols = conn.execute(text("PRAGMA table_info(session_results)")).fetchall()
-                names = {row[1] for row in cols}
-                if cols and "fetched_at" not in names:
-                    conn.execute(text("ALTER TABLE session_results ADD COLUMN fetched_at DATETIME"))
-            else:
-                conn.execute(
-                    text(
-                        "ALTER TABLE session_results "
-                        "ADD COLUMN IF NOT EXISTS fetched_at TIMESTAMPTZ DEFAULT now()"
-                    )
-                )
-    except Exception as e:  # pragma: no cover - never block startup on migration
-        print(f"[MIGRATION] session_results.fetched_at skipped: {e}")
+    def _add_column(table: str, column: str, sqlite_type: str, pg_ddl: str) -> None:
+        try:
+            with engine.begin() as conn:
+                if _is_sqlite:
+                    cols = conn.execute(text(f"PRAGMA table_info({table})")).fetchall()
+                    names = {row[1] for row in cols}
+                    if cols and column not in names:
+                        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {sqlite_type}"))
+                else:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {pg_ddl}"))
+        except Exception as e:  # pragma: no cover - never block startup on migration
+            print(f"[MIGRATION] {table}.{column} skipped: {e}")
+
+    _add_column("session_results", "fetched_at", "DATETIME", "TIMESTAMPTZ DEFAULT now()")
+    # Clerk identity column for the users table.
+    _add_column("users", "clerk_user_id", "VARCHAR", "VARCHAR")

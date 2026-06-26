@@ -2,28 +2,16 @@ from __future__ import annotations
 
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 
 
 class UserOut(BaseModel):
     id: int
-    email: EmailStr
+    email: Optional[str] = None
     full_name: Optional[str] = None
 
     class Config:
-        orm_mode = True
-
-
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    user: UserOut
-
-
-class AuthPayload(BaseModel):
-    email: EmailStr
-    password: str
-    full_name: Optional[str] = None
+        from_attributes = True
 
 
 class FavoritePayload(BaseModel):
@@ -37,4 +25,4 @@ class FavoriteOut(BaseModel):
     team_id: Optional[str] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True

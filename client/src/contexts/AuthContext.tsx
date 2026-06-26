@@ -1,11 +1,9 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
+import { useAuth as useClerkAuth, useUser } from '@clerk/clerk-react';
 import type { User, Favorite } from '../types/auth';
 import {
-  loginUser,
-  registerUser,
-  fetchMe,
-  setAuthToken,
+  registerTokenGetter,
   getFavorites,
   addFavorite,
   removeFavorite,
@@ -13,14 +11,10 @@ import {
 
 interface AuthContextType {
   user: User | null;
-  token: string | null;
-  loading: boolean; // session bootstrap
-  processing: boolean; // active auth action
+  loading: boolean; // session bootstrap (Clerk loading)
   favorites: Favorite[];
   favoriteDriverIds: string[];
-  login: (email: string, password: string) => Promise<User | null>;
-  register: (email: string, password: string, fullName?: string) => Promise<User | null>;
-  logout: () => void;
+  logout: () => Promise<void>;
   refreshFavorites: () => Promise<void>;
   toggleFavorite: (driverId: string) => Promise<void>;
 }
@@ -38,20 +32,33 @@ interface Props {
 }
 
 export const AuthProvider: React.FC<Props> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem('pitwall_token'));
-  const [loading, setLoading] = useState(true);
-  const [processing, setProcessing] = useState(false);
+  const { isLoaded, isSignedIn, getToken, signOut } = useClerkAuth();
+  const { user: clerkUser } = useUser();
   const [favorites, setFavorites] = useState<Favorite[]>([]);
+
+  // Map the Clerk user onto the app's existing User shape so downstream
+  // components (Header, pages) keep working unchanged.
+  const user: User | null = useMemo(() => {
+    if (!isSignedIn || !clerkUser) return null;
+    return {
+      id: 0, // backend owns the numeric id; UI only reads email/full_name
+      email: clerkUser.primaryEmailAddress?.emailAddress ?? '',
+      full_name: clerkUser.fullName ?? clerkUser.firstName ?? null,
+    };
+  }, [isSignedIn, clerkUser]);
 
   const favoriteDriverIds = useMemo(
     () => favorites.filter((f) => f.driver_id).map((f) => String(f.driver_id)),
     [favorites]
   );
 
-  const hydrateFavorites = async (activeToken?: string | null) => {
-    const effectiveToken = activeToken ?? token;
-    if (!effectiveToken) return;
+  // Feed Clerk session tokens to the axios request interceptor.
+  useEffect(() => {
+    registerTokenGetter(() => getToken());
+    return () => registerTokenGetter(null);
+  }, [getToken]);
+
+  const hydrateFavorites = async () => {
     try {
       const data = await getFavorites();
       setFavorites(data);
@@ -60,48 +67,20 @@ export const AuthProvider: React.FC<Props> = ({ children }) => {
     }
   };
 
-  const bootstrapSession = async (activeToken: string, activeUser: User) => {
-    setToken(activeToken);
-    setUser(activeUser);
-    localStorage.setItem('pitwall_token', activeToken);
-    setAuthToken(activeToken);
-    await hydrateFavorites(activeToken);
-  };
-
-  const login = async (email: string, password: string): Promise<User | null> => {
-    setProcessing(true);
-    try {
-      const res = await loginUser(email, password);
-      await bootstrapSession(res.access_token, res.user);
-      return res.user;
-    } catch (err) {
-      console.error('Login failed', err);
-      throw err;
-    } finally {
-      setProcessing(false);
+  // Load favorites once Clerk reports a signed-in session; clear on sign-out.
+  useEffect(() => {
+    if (!isLoaded) return;
+    if (isSignedIn) {
+      hydrateFavorites();
+    } else {
+      setFavorites([]);
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoaded, isSignedIn]);
 
-  const register = async (email: string, password: string, fullName?: string): Promise<User | null> => {
-    setProcessing(true);
-    try {
-      const res = await registerUser(email, password, fullName);
-      await bootstrapSession(res.access_token, res.user);
-      return res.user;
-    } catch (err) {
-      console.error('Registration failed', err);
-      throw err;
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  const logout = () => {
-    setUser(null);
-    setToken(null);
+  const logout = async () => {
     setFavorites([]);
-    localStorage.removeItem('pitwall_token');
-    setAuthToken(null);
+    await signOut();
   };
 
   const refreshFavorites = async () => {
@@ -109,7 +88,7 @@ export const AuthProvider: React.FC<Props> = ({ children }) => {
   };
 
   const toggleFavorite = async (driverId: string) => {
-    if (!user) {
+    if (!isSignedIn) {
       throw new Error('Not authenticated');
     }
     const existing = favorites.find((f) => f.driver_id === driverId);
@@ -127,38 +106,13 @@ export const AuthProvider: React.FC<Props> = ({ children }) => {
     }
   };
 
-  useEffect(() => {
-    setAuthToken(token);
-    const init = async () => {
-      if (!token) {
-        setLoading(false);
-        return;
-      }
-      try {
-        const me = await fetchMe();
-        setUser(me);
-        await hydrateFavorites(token);
-      } catch (err) {
-        console.error('Session bootstrap failed', err);
-        logout();
-      } finally {
-        setLoading(false);
-      }
-    };
-    init();
-  }, [token]);
-
   return (
     <AuthContext.Provider
       value={{
         user,
-        token,
-        loading,
-        processing,
+        loading: !isLoaded,
         favorites,
         favoriteDriverIds,
-        login,
-        register,
         logout,
         refreshFavorites,
         toggleFavorite,

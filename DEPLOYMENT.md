@@ -12,19 +12,38 @@
 Set these on Render:
 
 - `DATABASE_URL`: Neon pooled Postgres URL, including `sslmode=require`
-- `JWT_SECRET`: long random secret
-- `JWT_ALGORITHM`: `HS256`
-- `ACCESS_TOKEN_EXPIRE_MINUTES`: `10080`
+- `CLERK_ISSUER`: Clerk Frontend API URL, e.g. `https://<slug>.clerk.accounts.dev` (no trailing slash)
+- `CLERK_SECRET_KEY`: Clerk secret key (`sk_live_...` in production)
 - `CORS_ORIGINS`: deployed frontend URL, plus local dev if needed
 - `FRONTEND_URL`: deployed frontend URL
 - `FASTF1_CACHE_DIR`: `/tmp/fastf1-cache`
 - `ADMIN_SYNC_SECRET`: long random secret for `/api/admin/sync`
 
+The `JWT_*` variables are legacy and no longer used (Clerk owns authentication).
+
 ## Frontend Environment
 
-Set this on Vercel:
+Set these on Vercel:
 
 - `VITE_API_BASE_URL`: Render backend URL
+- `VITE_CLERK_PUBLISHABLE_KEY`: Clerk publishable key (`pk_live_...` in production)
+
+## Authentication (Clerk)
+
+Login/registration is handled by [Clerk](https://dashboard.clerk.com); the backend
+only verifies Clerk session tokens (JWKS, RS256) via `CLERK_ISSUER`.
+
+One-time dashboard setup:
+
+1. Create an application in the Clerk dashboard.
+2. **User & Authentication → Social Connections → Google → enable.** (For dev
+   instances Clerk provides shared Google credentials; for production add your own
+   Google OAuth client ID/secret.)
+3. **API Keys** → copy the Publishable key (frontend) and Secret key (backend);
+   the "Frontend API URL" there is your `CLERK_ISSUER`.
+4. Add your deployed frontend domain under **Domains** for production instances.
+
+Local dev uses `pk_test_`/`sk_test_` keys in `client/.env` and `server/.env`.
 
 ## First Production Seed
 

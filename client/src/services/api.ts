@@ -1,19 +1,35 @@
 import axios from 'axios';
 import type { RaceEvent, Driver, RaceResult, DriverSeasonStats, DriverStanding, TeamStanding } from '../types/f1';
-import type { AuthResponse, User, Favorite } from '../types/auth';
+import type { User, Favorite } from '../types/auth';
 
 const API_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '';
 const api = axios.create({
     baseURL: API_URL,
 });
 
-export const setAuthToken = (token?: string | null) => {
-    if (token) {
-        api.defaults.headers.common.Authorization = `Bearer ${token}`;
-    } else {
-        delete api.defaults.headers.common.Authorization;
-    }
+// Clerk session tokens are short-lived and refreshed by the SDK, so we fetch a
+// fresh token per request via a registered async getter instead of caching one.
+let tokenGetter: (() => Promise<string | null>) | null = null;
+
+export const registerTokenGetter = (fn: (() => Promise<string | null>) | null) => {
+    tokenGetter = fn;
 };
+
+api.interceptors.request.use(async (config) => {
+    if (tokenGetter) {
+        try {
+            const token = await tokenGetter();
+            if (token) {
+                config.headers.Authorization = `Bearer ${token}`;
+            } else {
+                delete config.headers.Authorization;
+            }
+        } catch {
+            delete config.headers.Authorization;
+        }
+    }
+    return config;
+});
 
 export const getRaces = async (year: number): Promise<RaceEvent[]> => {
     const res = await api.get(`/api/races`, { params: { year } });
@@ -134,16 +150,8 @@ export const getStintsAnalysis = async (year: number, round: number, driver: str
 };
 
 // --- Auth ---
-export const loginUser = async (email: string, password: string): Promise<AuthResponse> => {
-    const res = await api.post(`/auth/login`, { email, password });
-    return res.data;
-};
-
-export const registerUser = async (email: string, password: string, full_name?: string): Promise<AuthResponse> => {
-    const res = await api.post(`/auth/register`, { email, password, full_name });
-    return res.data;
-};
-
+// Login/registration are handled by Clerk on the client. The backend only
+// exposes /auth/me, which verifies the Clerk token and returns the local user.
 export const fetchMe = async (): Promise<User> => {
     const res = await api.get(`/auth/me`);
     return res.data;

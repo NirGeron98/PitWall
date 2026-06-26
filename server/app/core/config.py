@@ -28,6 +28,18 @@ ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 
 ADMIN_SYNC_SECRET: str | None = os.getenv("ADMIN_SYNC_SECRET")
 
 
+# --- Clerk authentication ---
+# Issuer is the Clerk Frontend API domain, e.g. https://<slug>.clerk.accounts.dev
+# (no trailing slash). JWKS is derived from it unless overridden.
+CLERK_ISSUER: str | None = (os.getenv("CLERK_ISSUER") or "").rstrip("/") or None
+CLERK_JWKS_URL: str | None = os.getenv("CLERK_JWKS_URL") or (
+    f"{CLERK_ISSUER}/.well-known/jwks.json" if CLERK_ISSUER else None
+)
+# Secret key (sk_...) is optional for JWKS verification but kept for any
+# server-side Clerk API calls.
+CLERK_SECRET_KEY: str | None = os.getenv("CLERK_SECRET_KEY")
+
+
 # --- CORS ---
 # Accept either:
 # - CORS_ORIGINS="https://a.com,https://b.com"

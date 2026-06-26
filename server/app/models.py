@@ -112,8 +112,12 @@ class UserModel(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
-    email = Column(String, unique=True, index=True, nullable=False)
-    password_hash = Column(String, nullable=False)
+    # Clerk user id (the JWT "sub" claim). Primary external identity.
+    clerk_user_id = Column(String, unique=True, index=True, nullable=True)
+    email = Column(String, index=True, nullable=True)
+    # Legacy password auth removed (Clerk owns credentials); kept nullable so the
+    # column survives on existing databases without a destructive migration.
+    password_hash = Column(String, nullable=True)
     full_name = Column(String, nullable=True)
 
 

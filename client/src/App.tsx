@@ -84,18 +84,13 @@ function AppShell() {
   const {
     user,
     loading: authLoading,
-    processing: authProcessing,
     favoriteDriverIds,
     toggleFavorite: toggleFavoriteMutation,
-    login,
-    register,
   } = useAuth();
 
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [authStatus, setAuthStatus] = useState<string | null>(null);
-  const [authError, setAuthError] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
   const [selectedRace, setSelectedRace] = useState<RaceEvent | null>(null);
@@ -182,7 +177,6 @@ function AppShell() {
       await toggleFavoriteMutation(driverNum);
     } catch (err) {
       console.error("Failed to toggle favorite", err);
-      setAuthError("Please log in to manage favorites.");
       navigate("/drivers");
     }
   };
@@ -280,40 +274,6 @@ function AppShell() {
     [compareSelection, drivers]
   );
 
-  const handleLoginSubmit = async (email: string, password: string) => {
-    setAuthError(null);
-    setAuthStatus("Authenticating...");
-    try {
-      await login(email, password);
-      setAuthStatus(null);
-      navigate("/races");
-    } catch (err) {
-      setAuthStatus(null);
-      setAuthError(
-        "Unable to authenticate. Check your credentials and try again."
-      );
-      throw err;
-    }
-  };
-
-  const handleRegisterSubmit = async (
-    email: string,
-    password: string,
-    fullName?: string
-  ) => {
-    setAuthError(null);
-    setAuthStatus("Provisioning paddock credentials...");
-    try {
-      await register(email, password, fullName);
-      setAuthStatus(null);
-      navigate("/races");
-    } catch (err) {
-      setAuthStatus(null);
-      setAuthError("Registration failed. Try a different email.");
-      throw err;
-    }
-  };
-
   if (authLoading) {
     return <Loading message="Initializing PitWall Stack..." />;
   }
@@ -321,34 +281,8 @@ function AppShell() {
   if (!user) {
     return (
       <Routes>
-        <Route
-          path="/login"
-          element={
-            <AuthPage
-              mode="login"
-              onModeChange={() => navigate("/signup")}
-              onLogin={handleLoginSubmit}
-              onRegister={handleRegisterSubmit}
-              loading={authProcessing || Boolean(authStatus)}
-              status={authStatus}
-              error={authError}
-            />
-          }
-        />
-        <Route
-          path="/signup"
-          element={
-            <AuthPage
-              mode="register"
-              onModeChange={() => navigate("/login")}
-              onLogin={handleLoginSubmit}
-              onRegister={handleRegisterSubmit}
-              loading={authProcessing || Boolean(authStatus)}
-              status={authStatus}
-              error={authError}
-            />
-          }
-        />
+        <Route path="/login/*" element={<AuthPage mode="login" />} />
+        <Route path="/signup/*" element={<AuthPage mode="register" />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     );

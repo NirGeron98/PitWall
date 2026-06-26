@@ -1,67 +1,101 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
 from typing import Optional
 
+import jwt
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
-from passlib.context import CryptContext
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jwt import PyJWKClient
 from sqlalchemy.orm import Session
 
-from app.core.config import ACCESS_TOKEN_EXPIRE_MINUTES, JWT_ALGORITHM, JWT_SECRET
+from app.core.config import CLERK_ISSUER, CLERK_JWKS_URL
 from app.database import get_db
 from app.models import UserModel
 
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Clerk sends the session token as a Bearer token in the Authorization header.
+bearer_scheme = HTTPBearer(auto_error=False)
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
-
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+# Cache the JWKS client so we don't refetch signing keys on every request.
+_jwks_client: Optional[PyJWKClient] = None
 
 
-def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+def _get_jwks_client() -> PyJWKClient:
+    global _jwks_client
+    if not CLERK_JWKS_URL:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Clerk auth is not configured (set CLERK_ISSUER).",
+        )
+    if _jwks_client is None:
+        _jwks_client = PyJWKClient(CLERK_JWKS_URL)
+    return _jwks_client
 
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
-
-
-def get_user_by_email(db: Session, email: str) -> Optional[UserModel]:
-    return db.query(UserModel).filter(UserModel.email == email).first()
-
-
-def authenticate_user(db: Session, email: str, password: str) -> Optional[UserModel]:
-    user = get_user_by_email(db, email)
-    if not user:
-        return None
-    if not verify_password(password, user.password_hash):
-        return None
-    return user
-
-
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> UserModel:
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+def _verify_clerk_token(token: str) -> dict:
+    """Verify a Clerk session JWT against the issuer's JWKS and return its claims."""
     try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        email: str | None = payload.get("sub")
-        if email is None:
-            raise credentials_exception
-    except JWTError:
-        raise credentials_exception
+        signing_key = _get_jwks_client().get_signing_key_from_jwt(token)
+        claims = jwt.decode(
+            token,
+            signing_key.key,
+            algorithms=["RS256"],
+            issuer=CLERK_ISSUER,
+            # Clerk session tokens don't carry an `aud` claim by default.
+            options={"verify_aud": False},
+        )
+        return claims
+    except Exception as exc:  # invalid signature, expired, wrong issuer, etc.
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
 
-    user = get_user_by_email(db, email=email)
+
+def get_current_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+) -> UserModel:
+    """Resolve the authenticated Clerk user, upserting a local row keyed by Clerk id."""
+    if credentials is None or not credentials.credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    claims = _verify_clerk_token(credentials.credentials)
+    clerk_user_id = claims.get("sub")
+    if not clerk_user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token subject")
+
+    # Clerk can be configured to include email/name claims; fall back gracefully.
+    email = claims.get("email") or None
+    full_name = claims.get("name") or None
+
+    user = db.query(UserModel).filter(UserModel.clerk_user_id == clerk_user_id).first()
     if user is None:
-        raise credentials_exception
+        user = UserModel(
+            clerk_user_id=clerk_user_id,
+            email=email,
+            full_name=full_name,
+            password_hash="",  # legacy NOT NULL safety; Clerk owns credentials
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    else:
+        # Keep local copy fresh if Clerk provides updated profile claims.
+        changed = False
+        if email and user.email != email:
+            user.email = email
+            changed = True
+        if full_name and user.full_name != full_name:
+            user.full_name = full_name
+            changed = True
+        if changed:
+            db.commit()
+            db.refresh(user)
+
     return user
