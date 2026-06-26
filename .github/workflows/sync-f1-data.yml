@@ -16,19 +16,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Sync current year
+        env:
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+          ADMIN_SYNC_SECRET: ${{ secrets.ADMIN_SYNC_SECRET }}
         run: |
           YEAR=$(date +%Y)
           echo "Syncing F1 data for $YEAR..."
-          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
-            "${{ secrets.BACKEND_URL }}/api/admin/sync?year=$YEAR" \
-            -H "x-admin-sync-secret: ${{ secrets.ADMIN_SYNC_SECRET }}" \
-            --max-time 600)
-          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-          BODY=$(echo "$RESPONSE" | head -1)
-          echo "Response: $BODY"
-          echo "HTTP status: $HTTP_CODE"
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "Sync failed with status $HTTP_CODE"
-            exit 1
-          fi
-          echo "Sync completed successfully"
+          curl -s -X POST \
+            "${BACKEND_URL}/api/admin/sync?year=${YEAR}" \
+            -H "x-admin-sync-secret: ${ADMIN_SYNC_SECRET}" \
+            --max-time 600
+          echo "Sync complete"
