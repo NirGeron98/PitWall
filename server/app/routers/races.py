@@ -69,7 +69,8 @@ def get_races(year: int, db: Session = Depends(get_db)):
 
 @router.get("/race-results")
 def get_race_results(year: int, round: int, refresh: bool = False, db: Session = Depends(get_db)):
-    return load_session_results(year, round, "R", refresh, db)
+    data = load_session_results(year, round, "R", refresh, db)
+    return data.get("results", data) if isinstance(data, dict) else data
 
 
 @router.get("/session-results")
@@ -80,8 +81,16 @@ def get_session_results(
     refresh: bool = False,
     db: Session = Depends(get_db),
 ):
+    from fastapi.responses import JSONResponse
     session_code = session.upper()
     if session_code not in {"P1", "P2", "P3", "Q", "R", "S"}:
         raise HTTPException(status_code=400, detail="Invalid session code")
 
-    return load_session_results(year, round, session_code, refresh, db)
+    data = load_session_results(year, round, session_code, refresh, db)
+    if isinstance(data, dict):
+        # Return results array with session_status in a response header
+        # so the frontend can show the right empty-state message.
+        response = JSONResponse(content=data["results"])
+        response.headers["X-Session-Status"] = data.get("session_status", "ok")
+        return response
+    return data

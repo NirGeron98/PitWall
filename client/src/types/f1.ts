@@ -5,7 +5,11 @@ export interface RaceEvent {
     EventName: string;
     EventDate: string;
     EventFormat: string;
-    Session5Date: string; // Race Date
+    Session5Date: string;   // Race day
+    Session1Date?: string;  // FP1
+    Session2Date?: string;  // FP2 / Sprint Qualifying
+    Session3Date?: string;  // FP3 / Sprint
+    Session4Date?: string;  // Qualifying
 }
 
 export interface Driver {

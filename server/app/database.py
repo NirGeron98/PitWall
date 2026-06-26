@@ -90,3 +90,6 @@ def _run_lightweight_migrations() -> None:
     _add_column("session_results", "fetched_at", "DATETIME", "TIMESTAMPTZ DEFAULT now()")
     # Clerk identity column for the users table.
     _add_column("users", "clerk_user_id", "VARCHAR", "VARCHAR")
+    # Individual session dates on the races table.
+    for col in ("session1_date", "session2_date", "session3_date", "session4_date", "session5_date"):
+        _add_column("races", col, "VARCHAR", "VARCHAR")

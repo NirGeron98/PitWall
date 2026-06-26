@@ -53,11 +53,19 @@ export const getRaceResults = async (year: number, round: number): Promise<RaceR
     return res.data;
 };
 
-export const getSessionResults = async (year: number, round: number, session: string, refresh = false): Promise<RaceResult[]> => {
+export type SessionStatus = 'ok' | 'ended_no_data' | 'no_data';
+
+export const getSessionResults = async (
+    year: number,
+    round: number,
+    session: string,
+    refresh = false,
+): Promise<{ results: RaceResult[]; sessionStatus: SessionStatus }> => {
     const res = await api.get(`/api/session-results`, {
-        params: { year, round, session, refresh }
+        params: { year, round, session, refresh },
     });
-    return res.data;
+    const sessionStatus = (res.headers['x-session-status'] as SessionStatus) || 'ok';
+    return { results: res.data, sessionStatus };
 };
 
 export const getDriverStandings = async (year: number): Promise<DriverStanding[]> => {

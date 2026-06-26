@@ -272,14 +272,14 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, initialYea
     }
 
     try {
-
       const promise = getSessionResults(year, round, session, forceRefresh)
-        .then(results => {
-          // Update cache
-          setSessionCache(prev => ({
-            ...prev,
-            [cacheKey]: results
-          }));
+        .then(({ results, sessionStatus }) => {
+          // Only cache non-empty results; empty means "retry next time"
+          if (results.length > 0) {
+            setSessionCache(prev => ({ ...prev, [cacheKey]: results }));
+          }
+          // Attach sessionStatus as a property so RaceDetailsModal can read it.
+          (results as any)._sessionStatus = sessionStatus;
           return results;
         })
         .finally(() => {

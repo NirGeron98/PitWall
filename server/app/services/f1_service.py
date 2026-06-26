@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import fastf1
@@ -252,18 +252,40 @@ def _load_session_results(
     if not f1_session_code:
         raise HTTPException(status_code=400, detail="Invalid session code")
 
-    # Detect live weekend and whether the event is already finished
+    # Map session code → which session date field to check.
+    # Conventional: P1→session1, P2→session2, P3→session3, Q→session4, R→session5
+    # Sprint: P1→session1, S→session3, Q→session4, R→session5
+    session_date_field = {
+        "P1": "session1_date", "P2": "session2_date", "P3": "session3_date",
+        "Q": "session4_date", "S": "session3_date", "R": "session5_date",
+    }.get(session_code, "session5_date")
+
+    # Detect live weekend and whether the event / specific session is already finished.
     live_window = False
     event_finished = False
+    session_ended = False  # True when THIS session's scheduled start has passed
     try:
         race = db.query(RaceModel).filter(RaceModel.year == year, RaceModel.round == round).first()
         if race and race.date:
             race_date = datetime.fromisoformat(str(race.date)).date()
-            today = datetime.now(timezone.utc).date()
+            now_utc = datetime.now(timezone.utc)
+            today = now_utc.date()
             if abs((race_date - today).days) <= LIVE_WINDOW_DAYS:
                 live_window = True
             if today > race_date:
                 event_finished = True
+            # Check the specific session date (e.g. Session1Date for P1)
+            session_date_str = getattr(race, session_date_field, None)
+            if session_date_str and str(session_date_str) not in ("None", "NaT", ""):
+                try:
+                    session_dt = datetime.fromisoformat(str(session_date_str))
+                    if session_dt.tzinfo is None:
+                        session_dt = session_dt.replace(tzinfo=timezone.utc)
+                    # Consider session "ended" if its scheduled start + 2h has passed.
+                    if now_utc > session_dt + timedelta(hours=2):
+                        session_ended = True
+                except Exception:
+                    pass
     except Exception as e:
         print(f"Could not determine live window: {e}")
 
@@ -295,7 +317,7 @@ def _load_session_results(
             year, round, session_code, cache="hit", source="db",
             load=0.0, db=db_elapsed, total=time.perf_counter() - req_start, rows=len(cached),
         )
-        return _serialize_cached_results(cached)
+        return {"results": _serialize_cached_results(cached), "session_status": "ok"}
 
     # Fetch fresh data from FastF1
     try:
@@ -303,7 +325,8 @@ def _load_session_results(
         try:
             sess = fastf1.get_session(year, round, f1_session_code)
         except ValueError:
-            return []
+            status = "ended_no_data" if session_ended else "no_data"
+            return {"results": [], "session_status": status}
         except Exception:
             raise
 
@@ -377,7 +400,14 @@ def _load_session_results(
             year, round, session_code, cache="miss", source="fastf1",
             load=load_elapsed, db=db_elapsed, total=time.perf_counter() - req_start, rows=len(output),
         )
-        return output
+        # Determine the session status to return alongside results.
+        if output:
+            status = "ok"
+        elif session_ended:
+            status = "ended_no_data"  # session finished, FastF1 hasn't published yet
+        else:
+            status = "no_data"  # session hasn't happened or has no data
+        return {"results": output, "session_status": status}
 
     except Exception as e:
         traceback.print_exc()
@@ -388,7 +418,7 @@ def _load_session_results(
                 year, round, session_code, cache="hit", source="db-fallback",
                 load=0.0, db=db_elapsed, total=time.perf_counter() - req_start, rows=len(cached),
             )
-            return _serialize_cached_results(cached)
+            return {"results": _serialize_cached_results(cached), "session_status": "ok"}
 
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -508,6 +538,12 @@ def process_year(year: int, db: Session) -> None:
                 if race["EventFormat"] == "testing":
                     continue
 
+                def _safe_date(val) -> str | None:
+                    try:
+                        return str(val) if val is not None and str(val) != "NaT" else None
+                    except Exception:
+                        return None
+
                 race_entry = RaceModel(
                     year=year,
                     round=race["RoundNumber"],
@@ -516,6 +552,11 @@ def process_year(year: int, db: Session) -> None:
                     location=race["Location"],
                     date=str(race["Session5Date"]),
                     event_format=race["EventFormat"],
+                    session1_date=_safe_date(race.get("Session1Date")),
+                    session2_date=_safe_date(race.get("Session2Date")),
+                    session3_date=_safe_date(race.get("Session3Date")),
+                    session4_date=_safe_date(race.get("Session4Date")),
+                    session5_date=_safe_date(race.get("Session5Date")),
                 )
                 db.add(race_entry)
                 count += 1
@@ -781,7 +822,9 @@ def prewarm_last_completed_race(year: int, db: Session) -> None:
         return
     try:
         # refresh=False so we reuse cache if already present; otherwise it will fetch once and store.
-        _load_session_results(year, last_round, "R", refresh=False, db=db)
+        result = _load_session_results(year, last_round, "R", refresh=False, db=db)
+        rows = result.get("results", result) if isinstance(result, dict) else result
+        _ = rows  # warming only — result discarded
     except Exception as e:  # pragma: no cover - best effort prewarm
         print(f"[PREWARM] Failed to cache {year} round {last_round}: {e}")
 
@@ -836,8 +879,13 @@ def warm_all_completed_sessions(year: int, db: Session) -> dict:
                 skipped += 1
                 continue
             try:
-                _load_session_results(year, race.round, session_code, refresh=False, db=db)
-                warmed += 1
+                result = _load_session_results(year, race.round, session_code, refresh=False, db=db)
+                rows = result.get("results", result) if isinstance(result, dict) else result
+                if rows:
+                    warmed += 1
+                else:
+                    skipped += 1  # session existed but had no data (future/no-data)
+
             except Exception as e:  # pragma: no cover - best effort warming
                 errors += 1
                 print(f"[WARM] Failed {year} R{race.round} {session_code}: {e}")
@@ -886,6 +934,11 @@ def cache_races_snapshot(year: int, db: Session) -> list[dict]:
             "Session5Date": r.date,
             "EventDate": r.date,  # Frontend compatibility: RaceCard uses Session5Date || EventDate
             "EventFormat": r.event_format,
+            # Individual session dates — lets the frontend/backend know when each session ends.
+            "Session1Date": r.session1_date,
+            "Session2Date": r.session2_date,
+            "Session3Date": r.session3_date,
+            "Session4Date": r.session4_date,
         }
         for r in races
     ]

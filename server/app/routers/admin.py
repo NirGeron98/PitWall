@@ -58,8 +58,9 @@ def sync_f1_data(
             warmed = errors = 0
             for code in sessions:
                 try:
-                    results = _load_session_results(target_year, round, code, refresh=False, db=db)
-                    if results:
+                    data = _load_session_results(target_year, round, code, refresh=False, db=db)
+                    rows = data.get("results", data) if isinstance(data, dict) else data
+                    if rows:
                         warmed += 1
                 except Exception as e:
                     errors += 1

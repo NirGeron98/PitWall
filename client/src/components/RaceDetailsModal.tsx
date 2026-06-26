@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { X, Flag, Clock } from 'lucide-react';
 import type { RaceEvent, RaceResult } from '../types/f1';
 import { useData } from '../contexts/DataContext';
-import { getRaceResults } from '../services/api';
+import { getRaceResults, type SessionStatus } from '../services/api';
 import { DriverAvatar } from './common/DriverAvatar';
 import { formatBroadcastName } from '../utils/formatters';
 
@@ -28,6 +28,47 @@ const sessionExistsForWeekend = (eventFormat: string | undefined, code: SessionC
     return true;
 };
 
+const EmptySessionMessage: React.FC<{
+    session: SessionCode;
+    eventFormat: string | undefined;
+    status: SessionStatus;
+    onRefresh: () => void;
+}> = ({ session, eventFormat, status, onRefresh }) => {
+    const label = sessionLabel(session);
+    if (!sessionExistsForWeekend(eventFormat, session)) {
+        return (
+            <>
+                <p style={{ fontWeight: 600 }}>No {label} results for this weekend.</p>
+                <p className="text-secondary" style={{ fontSize: '0.85rem' }}>
+                    This session was not part of the weekend format.
+                </p>
+            </>
+        );
+    }
+    if (status === 'ended_no_data') {
+        return (
+            <>
+                <p style={{ fontWeight: 600 }}>
+                    {label} has finished, but timing data is not yet available.
+                </p>
+                <p className="text-secondary" style={{ fontSize: '0.85rem' }}>
+                    Official results are usually published 30-60 minutes after session end.
+                </p>
+                <button className="btn-tab active" onClick={onRefresh}>Refresh</button>
+            </>
+        );
+    }
+    return (
+        <>
+            <p style={{ fontWeight: 600 }}>{label} results are not available yet.</p>
+            <p className="text-secondary" style={{ fontSize: '0.85rem' }}>
+                Timing data for this session has not been published. Please try again later.
+            </p>
+            <button className="btn-tab" onClick={onRefresh}>Refresh</button>
+        </>
+    );
+};
+
 // Centered message box reused for loading / empty / error states so a selected
 // tab never renders as a blank content area.
 const SessionStateBox: React.FC<{ children: React.ReactNode }> = ({ children }) => (
@@ -45,6 +86,7 @@ export const RaceDetailsModal: React.FC<Props> = ({ isOpen, onClose, race, onDri
     const [sessionStore, setSessionStore] = useState<Record<string, RaceResult[]>>({});
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(false);
+    const [sessionStatus, setSessionStatus] = useState<SessionStatus>('ok');
     const [activeSession, setActiveSession] = useState<SessionCode>('R');
     const prevRaceRound = useRef<number | null>(null);
 
@@ -108,11 +150,18 @@ export const RaceDetailsModal: React.FC<Props> = ({ isOpen, onClose, race, onDri
         let data: RaceResult[] = [];
         if (sessionCode === 'R') {
             data = await getRaceResults(year, race.RoundNumber);
+            setSessionStatus('ok');
         } else {
             data = await fetchSessionResultsWithCache(race.RoundNumber, sessionCode, forceRefresh);
+            // DataContext attaches _sessionStatus to the array for us to read.
+            const status: SessionStatus = (data as any)._sessionStatus ?? 'ok';
+            setSessionStatus(status);
         }
         const sorted = sortResults(data.map((d: any) => ({ ...d, SessionType: sessionCode })));
-        setSessionStore(prev => ({ ...prev, [cacheKey]: sorted }));
+        // Only store non-empty results; empty allows a retry on next open.
+        if (sorted.length > 0) {
+            setSessionStore(prev => ({ ...prev, [cacheKey]: sorted }));
+        }
         return sorted;
     };
 
@@ -121,6 +170,7 @@ export const RaceDetailsModal: React.FC<Props> = ({ isOpen, onClose, race, onDri
         const cacheKey = `${race.RoundNumber}-${sessionCode}`;
         const cachedResults = sessionStore[cacheKey];
         setError(false);
+        setSessionStatus('ok');
         // Show cached results instantly; otherwise clear stale data from the
         // previous tab so the loader/empty-state shows instead of wrong results.
         if (!forceRefresh && cachedResults) {
@@ -295,28 +345,12 @@ export const RaceDetailsModal: React.FC<Props> = ({ isOpen, onClose, race, onDri
                             </SessionStateBox>
                         ) : results.length === 0 ? (
                             <SessionStateBox>
-                                {sessionExistsForWeekend(race.EventFormat, activeSession) ? (
-                                    <>
-                                        <p style={{ fontWeight: 600 }}>
-                                            {sessionLabel(activeSession)} results are not available yet.
-                                        </p>
-                                        <p className="text-secondary" style={{ fontSize: '0.85rem' }}>
-                                            Timing data for this session hasn’t been published. Please try again later.
-                                        </p>
-                                        <button className="btn-tab" onClick={() => fetchData(activeSession, true)}>
-                                            Refresh
-                                        </button>
-                                    </>
-                                ) : (
-                                    <>
-                                        <p style={{ fontWeight: 600 }}>
-                                            No {sessionLabel(activeSession)} results are available for this race weekend.
-                                        </p>
-                                        <p className="text-secondary" style={{ fontSize: '0.85rem' }}>
-                                            This session was not part of the weekend format.
-                                        </p>
-                                    </>
-                                )}
+                                <EmptySessionMessage
+                                    session={activeSession}
+                                    eventFormat={race.EventFormat}
+                                    status={sessionStatus}
+                                    onRefresh={() => fetchData(activeSession, true)}
+                                />
                             </SessionStateBox>
                         ) : (
                             <div className="race-results-stack">

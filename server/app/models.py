@@ -16,8 +16,15 @@ class RaceModel(Base):
     event_name = Column(String)
     country = Column(String)
     location = Column(String)
-    date = Column(String)  # ISO format string
+    date = Column(String)  # ISO format string — Session5Date (race day)
     event_format = Column(String)
+    # Individual session start times (ISO strings, nullable for older cached rows).
+    # Used to determine whether a specific session (P1, Q, etc.) has already ended.
+    session1_date = Column(String, nullable=True)  # FP1
+    session2_date = Column(String, nullable=True)  # FP2 / Sprint Qualifying
+    session3_date = Column(String, nullable=True)  # FP3 / Sprint
+    session4_date = Column(String, nullable=True)  # Qualifying
+    session5_date = Column(String, nullable=True)  # Race
     
     __table_args__ = (
         # Composite index for the common query pattern: filter by year, order by round

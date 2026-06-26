@@ -128,8 +128,8 @@ export function useF1Data() {
 
         try {
             const promise = getSessionResults(year, round, session, forceRefresh)
-                .then(results => {
-                    sessionCache[cacheKey] = results;
+                .then(({ results }) => {
+                    if (results.length > 0) sessionCache[cacheKey] = results;
                     return results;
                 })
                 .finally(() => {
