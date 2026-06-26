@@ -2,12 +2,14 @@ name: Sync F1 Data
 
 on:
   schedule:
-    # Every hour Friday–Sunday (race weekends) UTC
-    # Friday 10:00–Sunday 23:00 UTC covers most sessions globally
-    - cron: '0 * * * 5'   # Every hour on Friday
-    - cron: '0 * * * 6'   # Every hour on Saturday
-    - cron: '0 * * * 0'   # Every hour on Sunday
-    # Every Monday at 08:00 UTC — pick up race results + standings
+    # Every 30 min during likely session hours Friday–Sunday UTC
+    # Covers FP1/FP2/FP3 (typically 10:30, 14:00), Qualifying (14:00–16:00),
+    # Sprint (12:00) and Race (13:00–16:00). 30 min matches FastF1's own
+    # publish lag so running faster than this gains nothing.
+    - cron: '0,30 9-17 * * 5'    # Every 30 min 09:00–17:30 Friday
+    - cron: '0,30 9-17 * * 6'    # Every 30 min 09:00–17:30 Saturday
+    - cron: '0,30 11-17 * * 0'   # Every 30 min 11:00–17:30 Sunday (race day)
+    # Monday 08:00 UTC — final pickup of race results + updated standings
     - cron: '0 8 * * 1'
   workflow_dispatch:        # Allow manual trigger from GitHub UI
 
