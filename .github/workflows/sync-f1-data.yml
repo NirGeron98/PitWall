@@ -15,6 +15,16 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
+      - name: Check secrets
+        env:
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+        run: |
+          if [ -z "$BACKEND_URL" ]; then
+            echo "ERROR: BACKEND_URL secret is empty or not set"
+            exit 1
+          fi
+          echo "BACKEND_URL is set: ${BACKEND_URL}"
+
       - name: Sync current year
         env:
           BACKEND_URL: ${{ secrets.BACKEND_URL }}
@@ -22,7 +32,7 @@ jobs:
         run: |
           YEAR=$(date +%Y)
           echo "Syncing F1 data for $YEAR..."
-          curl -s -X POST \
+          curl -v -X POST \
             "${BACKEND_URL}/api/admin/sync?year=${YEAR}" \
             -H "x-admin-sync-secret: ${ADMIN_SYNC_SECRET}" \
             --max-time 600
