@@ -1,0 +1,34 @@
+name: Sync F1 Data
+
+on:
+  schedule:
+    # Every hour Friday–Sunday (race weekends) UTC
+    # Friday 10:00–Sunday 23:00 UTC covers most sessions globally
+    - cron: '0 * * * 5'   # Every hour on Friday
+    - cron: '0 * * * 6'   # Every hour on Saturday
+    - cron: '0 * * * 0'   # Every hour on Sunday
+    # Every Monday at 08:00 UTC — pick up race results + standings
+    - cron: '0 8 * * 1'
+  workflow_dispatch:        # Allow manual trigger from GitHub UI
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync current year
+        run: |
+          YEAR=$(date +%Y)
+          echo "Syncing F1 data for $YEAR..."
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "${{ secrets.BACKEND_URL }}/api/admin/sync?year=$YEAR" \
+            -H "x-admin-sync-secret: ${{ secrets.ADMIN_SYNC_SECRET }}" \
+            --max-time 600)
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -1)
+          echo "Response: $BODY"
+          echo "HTTP status: $HTTP_CODE"
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Sync failed with status $HTTP_CODE"
+            exit 1
+          fi
+          echo "Sync completed successfully"
